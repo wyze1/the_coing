@@ -7,8 +7,6 @@ import android.graphics.ImageDecoder
 import android.graphics.Movie
 import android.graphics.drawable.AnimatedImageDrawable
 import android.graphics.drawable.Drawable
-import android.media.AudioAttributes
-import android.media.MediaPlayer
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -47,9 +45,8 @@ class GifWallpaperService : WallpaperService() {
             }
         }
 
-        // Videos.
-        private var player: MediaPlayer? = null
-        private var playerReady = false
+        // Videos (OpenGL, so they can be zoomed/fitted).
+        private var video: VideoRenderer? = null
         private var isVideo = false
 
         private var hasSurface = false
@@ -74,7 +71,14 @@ class GifWallpaperService : WallpaperService() {
             if (key == Prefs.KEY_SPEED && isVideo) {
                 // Change video speed in place, without restarting it.
                 speed = Prefs.speed(ctx)
-                if (visible) applyVideoSpeed()
+                video?.setSpeed(speed)
+                return
+            }
+            if (key == Prefs.KEY_ZOOM || key == Prefs.KEY_SCALE) {
+                // Zoom / fit change: just re-layout, so dragging the slider is smooth.
+                video?.setLayout(Prefs.scale(ctx) == Prefs.SCALE_FIT, Prefs.zoom(ctx))
+                updateBounds()
+                drawFrame()
                 return
             }
             load()
@@ -92,7 +96,7 @@ class GifWallpaperService : WallpaperService() {
             val anim = drawable as? AnimatedImageDrawable
             if (isVisible) {
                 anim?.start()
-                if (playerReady) runCatching { player?.start(); applyVideoSpeed() }
+                video?.setVisible(true)
                 if (movie != null) {
                     lastTick = SystemClock.uptimeMillis()
                     handler.removeCallbacks(movieTick)
@@ -102,7 +106,7 @@ class GifWallpaperService : WallpaperService() {
             } else {
                 // Pause when the screen is off or an app covers the wallpaper.
                 anim?.stop()
-                if (playerReady) runCatching { player?.pause() }
+                video?.setVisible(false)
                 handler.removeCallbacksAndMessages(null)
             }
         }
@@ -111,6 +115,7 @@ class GifWallpaperService : WallpaperService() {
             super.onSurfaceChanged(holder, format, width, height)
             surfaceW = width
             surfaceH = height
+            video?.setSize(width, height)
             updateBounds()
             drawFrame()
         }
@@ -162,45 +167,20 @@ class GifWallpaperService : WallpaperService() {
 
         private fun startVideo() {
             releasePlayer()
-            val file = Prefs.mediaFile(ctx)
-            player = runCatching {
-                MediaPlayer().apply {
-                    setAudioAttributes(
-                        AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_MEDIA)
-                            .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE)
-                            .build()
-                    )
-                    setSurface(surfaceHolder.surface)
-                    setDataSource(file.path)
-                    isLooping = true
-                    setVolume(0f, 0f)
-                    // Videos always fill the screen (cropping the edges).
-                    setVideoScalingMode(MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING)
-                    setOnPreparedListener {
-                        playerReady = true
-                        if (visible) {
-                            it.start()
-                            applyVideoSpeed()
-                        }
-                    }
-                    setOnErrorListener { _, _, _ -> true }
-                    prepareAsync()
-                }
-            }.getOrNull()
-        }
-
-        /** Note: setting playback params also resumes playback, so only call while visible. */
-        private fun applyVideoSpeed() {
-            val p = player ?: return
-            if (!playerReady) return
-            runCatching { p.playbackParams = p.playbackParams.setSpeed(speed) }
+            val r = VideoRenderer(surfaceHolder.surface, Prefs.mediaFile(ctx))
+            val frame = surfaceHolder.surfaceFrame
+            r.start(
+                if (surfaceW > 0) surfaceW else frame.width(),
+                if (surfaceH > 0) surfaceH else frame.height(),
+                Prefs.scale(ctx) == Prefs.SCALE_FIT, Prefs.zoom(ctx), speed,
+            )
+            if (visible) r.setVisible(true)
+            video = r
         }
 
         private fun releasePlayer() {
-            player?.let { runCatching { it.reset() }; it.release() }
-            player = null
-            playerReady = false
+            video?.release()
+            video = null
         }
 
         private fun release() {
@@ -218,10 +198,11 @@ class GifWallpaperService : WallpaperService() {
         private fun updateBounds() {
             if (surfaceW == 0 || surfaceH == 0) return
             val fit = Prefs.scale(ctx) == Prefs.SCALE_FIT
+            val zoom = Prefs.zoom(ctx)
             fun scaleFor(iw: Int, ih: Int): Float {
                 val sx = surfaceW.toFloat() / iw
                 val sy = surfaceH.toFloat() / ih
-                return if (fit) min(sx, sy) else max(sx, sy)
+                return (if (fit) min(sx, sy) else max(sx, sy)) * zoom
             }
 
             movie?.let { m ->
@@ -242,7 +223,7 @@ class GifWallpaperService : WallpaperService() {
         }
 
         private fun drawFrame() {
-            // While a video is attached, MediaPlayer owns the surface.
+            // While a video is attached, OpenGL owns the surface.
             if (!visible || isVideo) return
             val holder = surfaceHolder
             val canvas = try { holder.lockCanvas() } catch (e: Exception) { null } ?: return

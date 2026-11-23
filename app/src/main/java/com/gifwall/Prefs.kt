@@ -10,6 +10,9 @@ object Prefs {
     const val KEY_SCALE = "scale"
     const val KEY_TYPE = "type"
     const val KEY_SPEED = "speed"
+    const val KEY_ZOOM = "zoom"
+    const val ZOOM_MIN = 0.5f
+    const val ZOOM_MAX = 3f
 
     /** Speed choices shown on the slider. */
     val SPEEDS = floatArrayOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f)
@@ -31,6 +34,9 @@ object Prefs {
 
     fun scale(context: Context): String =
         get(context).getString(KEY_SCALE, SCALE_FILL) ?: SCALE_FILL
+
+    fun zoom(context: Context): Float =
+        get(context).getFloat(KEY_ZOOM, 1f).coerceIn(ZOOM_MIN, ZOOM_MAX)
 
     fun speed(context: Context): Float = get(context).getFloat(KEY_SPEED, 1f)
 

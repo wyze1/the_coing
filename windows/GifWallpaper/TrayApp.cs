@@ -12,7 +12,8 @@ internal sealed class TrayApp : ApplicationContext
     private readonly Settings _settings = Settings.Load();
     private readonly NotifyIcon _tray;
     private static readonly double[] Speeds = { 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3 };
-    private readonly ToolStripMenuItem _fitItem, _startupItem, _speedItem;
+    private static readonly double[] Zooms = { 0.5, 0.75, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3 };
+    private readonly ToolStripMenuItem _fitItem, _startupItem, _speedItem, _zoomItem;
     private readonly List<WallpaperForm> _forms = new();
     private readonly System.Windows.Forms.Timer _coverTimer = new() { Interval = 1500 };
     private readonly ExplorerWatcher _watcher;
@@ -35,9 +36,22 @@ internal sealed class TrayApp : ApplicationContext
         }
         UpdateSpeedChecks();
 
+        _zoomItem = new ToolStripMenuItem("Zoom");
+        _zoomItem.DropDownItems.Add("Zoom in", null, (_, _) => StepZoom(+1));
+        _zoomItem.DropDownItems.Add("Zoom out", null, (_, _) => StepZoom(-1));
+        _zoomItem.DropDownItems.Add(new ToolStripSeparator());
+        foreach (double z in Zooms)
+        {
+            var item = new ToolStripMenuItem(ZoomLabel(z) + (z == 1 ? " (normal)" : "")) { Tag = z };
+            item.Click += (_, _) => SetZoom(z);
+            _zoomItem.DropDownItems.Add(item);
+        }
+        UpdateZoomChecks();
+
         var menu = new ContextMenuStrip();
         menu.Items.Add("Choose GIF or video…", null, (_, _) => ChooseFile());
         menu.Items.Add(_speedItem);
+        menu.Items.Add(_zoomItem);
         menu.Items.Add(_fitItem);
         menu.Items.Add(_startupItem);
         menu.Items.Add(new ToolStripSeparator());
@@ -84,6 +98,18 @@ internal sealed class TrayApp : ApplicationContext
         _settings.Speed = sp;
         _settings.Save();
         UpdateSpeedChecks();
+
+        _zoomItem = new ToolStripMenuItem("Zoom");
+        _zoomItem.DropDownItems.Add("Zoom in", null, (_, _) => StepZoom(+1));
+        _zoomItem.DropDownItems.Add("Zoom out", null, (_, _) => StepZoom(-1));
+        _zoomItem.DropDownItems.Add(new ToolStripSeparator());
+        foreach (double z in Zooms)
+        {
+            var item = new ToolStripMenuItem(ZoomLabel(z) + (z == 1 ? " (normal)" : "")) { Tag = z };
+            item.Click += (_, _) => SetZoom(z);
+            _zoomItem.DropDownItems.Add(item);
+        }
+        UpdateZoomChecks();
         foreach (var f in _forms) f.SetSpeed(sp); // takes effect immediately, no reload
     }
 
@@ -92,6 +118,33 @@ internal sealed class TrayApp : ApplicationContext
         foreach (ToolStripMenuItem item in _speedItem.DropDownItems)
             item.Checked = Math.Abs((double)item.Tag! - _settings.Speed) < 0.001;
         _speedItem.Text = $"Speed ({SpeedLabel(_settings.Speed).Replace(" (normal)", "")})";
+    }
+
+    private static string ZoomLabel(double z) => $"{Math.Round(z * 100)}%";
+
+    private void SetZoom(double z)
+    {
+        _settings.Zoom = z;
+        _settings.Save();
+        UpdateZoomChecks();
+        foreach (var f in _forms) f.SetZoom(z); // instant, no reload
+    }
+
+    private void StepZoom(int dir)
+    {
+        // Move to the next preset above/below the current zoom.
+        double cur = _settings.Zoom;
+        double next = dir > 0
+            ? Zooms.FirstOrDefault(z => z > cur + 0.001, Zooms[^1])
+            : Zooms.LastOrDefault(z => z < cur - 0.001, Zooms[0]);
+        SetZoom(next);
+    }
+
+    private void UpdateZoomChecks()
+    {
+        foreach (var item in _zoomItem.DropDownItems.OfType<ToolStripMenuItem>())
+            if (item.Tag is double z) item.Checked = Math.Abs(z - _settings.Zoom) < 0.001;
+        _zoomItem.Text = $"Zoom ({ZoomLabel(_settings.Zoom)})";
     }
 
     private void ToggleFit()
@@ -167,7 +220,7 @@ internal sealed class TrayApp : ApplicationContext
                 form.Show();
                 Desktop.Place(form.Handle, screen.Bounds);
                 _forms.Add(form);
-                await form.LoadAsync(_env, pageFolder, mediaName, _settings.Fit, _settings.Speed);
+                await form.LoadAsync(_env, pageFolder, mediaName, _settings.Fit, _settings.Speed, _settings.Zoom);
             }
         }
         finally

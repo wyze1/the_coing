@@ -37,7 +37,7 @@ internal sealed class WallpaperForm : Form
     protected override bool ShowWithoutActivation => true;
 
     /// <param name="mediaName">File name of the media copy inside <paramref name="pageFolder"/>.</param>
-    public async Task LoadAsync(CoreWebView2Environment env, string pageFolder, string mediaName, bool fit, double speed)
+    public async Task LoadAsync(CoreWebView2Environment env, string pageFolder, string mediaName, bool fit, double speed, double zoom)
     {
         await _web.EnsureCoreWebView2Async(env);
         var core = _web.CoreWebView2;
@@ -51,8 +51,11 @@ internal sealed class WallpaperForm : Form
         bool video = !mediaName.EndsWith(".gif", StringComparison.OrdinalIgnoreCase)
                      && !mediaName.EndsWith(".webp", StringComparison.OrdinalIgnoreCase);
         core.Navigate($"https://{Host}/index.html#src={Uri.EscapeDataString(src)}" +
-                      $"&fit={(fit ? 1 : 0)}&video={(video ? 1 : 0)}&speed={Num(speed)}");
+                      $"&fit={(fit ? 1 : 0)}&video={(video ? 1 : 0)}&speed={Num(speed)}&zoom={Num(zoom)}");
     }
+
+    public void SetZoom(double zoom) =>
+        _ = _web.CoreWebView2?.ExecuteScriptAsync($"setZoom({Num(zoom)})");
 
     public void SetSpeed(double speed) =>
         _ = _web.CoreWebView2?.ExecuteScriptAsync($"setSpeed({Num(speed)})");
@@ -71,7 +74,7 @@ internal sealed class WallpaperForm : Form
 <html><head><meta charset="utf-8">
 <style>
   html,body{margin:0;height:100%;background:#000;overflow:hidden}
-  #m{width:100vw;height:100vh;display:block;object-fit:cover}
+  #m{width:100vw;height:100vh;display:block;object-fit:cover;transform-origin:center;transform:scale(var(--zoom,1))}
   body.fit #m{object-fit:contain}
 </style></head>
 <body>
@@ -83,6 +86,8 @@ internal sealed class WallpaperForm : Form
   let paused = false, resume = null;
   let el;
 
+  function setZoom(z) { document.documentElement.style.setProperty('--zoom', z); }
+  setZoom(parseFloat(p.get('zoom') || '1') || 1);
   function setSpeed(s) { speed = s; if (el && el.tagName === 'VIDEO') el.playbackRate = s; }
   function pauseMedia() { paused = true; if (el && el.tagName === 'VIDEO') el.pause(); }
   function playMedia() {

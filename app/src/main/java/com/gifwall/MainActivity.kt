@@ -38,8 +38,30 @@ class MainActivity : Activity() {
         group.setOnCheckedChangeListener { _, id ->
             val mode = if (id == R.id.scaleFit) Prefs.SCALE_FIT else Prefs.SCALE_FILL
             Prefs.get(this).edit().putString(Prefs.KEY_SCALE, mode).apply()
-            Prefs.bumpVersion(this)
         }
+
+        // Zoom: 50%–300%, updates the wallpaper live while dragging.
+        val zoomLabel = findViewById<TextView>(R.id.zoomLabel)
+        val zoomBar = findViewById<SeekBar>(R.id.zoomBar)
+        val minPct = (Prefs.ZOOM_MIN * 100).toInt()
+        zoomBar.max = (Prefs.ZOOM_MAX * 100).toInt() - minPct
+        fun showZoom(z: Float) {
+            zoomLabel.text = "Zoom: ${(z * 100).toInt()}%"
+            preview.scaleX = z; preview.scaleY = z
+            videoPreview.scaleX = z; videoPreview.scaleY = z
+        }
+        zoomBar.progress = (Prefs.zoom(this) * 100).toInt() - minPct
+        showZoom(Prefs.zoom(this))
+        zoomBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(bar: SeekBar, progress: Int, fromUser: Boolean) {
+                val z = (progress + minPct) / 100f
+                showZoom(z)
+                Prefs.get(this@MainActivity).edit().putFloat(Prefs.KEY_ZOOM, z).apply()
+            }
+            override fun onStartTrackingTouch(bar: SeekBar) {}
+            override fun onStopTrackingTouch(bar: SeekBar) {}
+        })
+        findViewById<Button>(R.id.zoomReset).setOnClickListener { zoomBar.progress = 100 - minPct }
 
         val speedLabel = findViewById<TextView>(R.id.speedLabel)
         val speedBar = findViewById<SeekBar>(R.id.speedBar)
