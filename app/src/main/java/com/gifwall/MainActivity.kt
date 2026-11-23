@@ -7,24 +7,29 @@ import android.content.ComponentName
 import android.content.Intent
 import android.graphics.ImageDecoder
 import android.graphics.drawable.AnimatedImageDrawable
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Bundle
+import android.view.View
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.RadioGroup
 import android.widget.TextView
 import android.widget.Toast
+import android.widget.VideoView
 import java.io.File
 
 class MainActivity : Activity() {
 
     private lateinit var preview: ImageView
+    private lateinit var videoPreview: VideoView
     private lateinit var status: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         preview = findViewById(R.id.preview)
+        videoPreview = findViewById(R.id.videoPreview)
         status = findViewById(R.id.status)
 
         val group = findViewById<RadioGroup>(R.id.scaleGroup)
@@ -36,17 +41,24 @@ class MainActivity : Activity() {
         }
 
         findViewById<Button>(R.id.photosButton).setOnClickListener { pickFromGooglePhotos() }
-        findViewById<Button>(R.id.pickButton).setOnClickListener { pickGif() }
+        findViewById<Button>(R.id.pickButton).setOnClickListener { pickFile() }
         findViewById<Button>(R.id.setButton).setOnClickListener { setWallpaper() }
 
         showPreview()
     }
 
-    /** Opens Google Photos directly (includes cloud-only photos, no settings needed). */
+    override fun onResume() {
+        super.onResume()
+        if (videoPreview.visibility == View.VISIBLE) videoPreview.start()
+    }
+
+    /** Opens Google Photos directly (includes cloud-only items, no settings needed). */
     private fun pickFromGooglePhotos() {
         val attempts = listOf(
+            Intent(Intent.ACTION_GET_CONTENT).setType("*/*")
+                .putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/*", "video/*")),
+            Intent(Intent.ACTION_PICK).setType("image/* video/*"),
             Intent(Intent.ACTION_GET_CONTENT).setType("image/*"),
-            Intent(Intent.ACTION_PICK).setType("image/*"),
         )
         for (intent in attempts) {
             intent.setPackage(GOOGLE_PHOTOS)
@@ -57,14 +69,14 @@ class MainActivity : Activity() {
             }
         }
         toast("Google Photos isn't installed. Opening the file picker instead.")
-        pickGif()
+        pickFile()
     }
 
-    private fun pickGif() {
+    private fun pickFile() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
-            type = "image/*"
-            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/gif", "image/webp"))
+            type = "*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("image/gif", "image/webp", "video/*"))
         }
         try {
             startActivityForResult(intent, REQ_PICK)
@@ -77,29 +89,38 @@ class MainActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         val uri = data?.data
-        if (requestCode == REQ_PICK && resultCode == RESULT_OK && uri != null) importGif(uri)
+        if (requestCode == REQ_PICK && resultCode == RESULT_OK && uri != null) importMedia(uri)
     }
 
-    private fun importGif(uri: Uri) {
+    private fun importMedia(uri: Uri) {
         status.text = "Importing…"
+        val mime = contentResolver.getType(uri) ?: ""
         Thread {
             val result = runCatching {
-                val dest = Prefs.gifFile(this)
+                val dest = Prefs.mediaFile(this)
                 val tmp = File(filesDir, "wallpaper.tmp")
                 contentResolver.openInputStream(uri)!!.use { input ->
                     tmp.outputStream().use { input.copyTo(it) }
                 }
-                // Make sure it actually decodes before replacing the current one.
-                val d = ImageDecoder.decodeDrawable(ImageDecoder.createSource(tmp))
+                val isVideo = mime.startsWith("video/") || hasVideoTrack(tmp)
+                var animated = true
+                if (!isVideo) {
+                    // Make sure it decodes before replacing the current one.
+                    val d = ImageDecoder.decodeDrawable(ImageDecoder.createSource(tmp))
+                    animated = d is AnimatedImageDrawable
+                }
                 if (!tmp.renameTo(dest)) error("Could not save file")
-                d is AnimatedImageDrawable
+                Prefs.get(this).edit()
+                    .putString(Prefs.KEY_TYPE, if (isVideo) Prefs.TYPE_VIDEO else Prefs.TYPE_IMAGE)
+                    .commit()
+                animated
             }
             runOnUiThread {
                 if (result.isSuccess) {
                     Prefs.bumpVersion(this)
                     showPreview()
                     if (result.getOrNull() == true) {
-                        toast("GIF saved. Tap \"Set as wallpaper\".")
+                        toast("Saved. Tap \"Set as wallpaper\".")
                     } else {
                         toast("Saved, but that image isn't animated, so it will be a still wallpaper.")
                     }
@@ -110,20 +131,49 @@ class MainActivity : Activity() {
         }.start()
     }
 
+    private fun hasVideoTrack(file: File): Boolean = runCatching {
+        val r = MediaMetadataRetriever()
+        try {
+            r.setDataSource(file.path)
+            r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO) == "yes"
+        } finally {
+            r.release()
+        }
+    }.getOrDefault(false)
+
     private fun showPreview() {
-        val file = Prefs.gifFile(this)
+        val file = Prefs.mediaFile(this)
         if (!file.exists()) return
-        runCatching {
-            val d = ImageDecoder.decodeDrawable(ImageDecoder.createSource(file))
-            preview.setImageDrawable(d)
-            (d as? AnimatedImageDrawable)?.start()
-            status.text = "Current GIF: ${file.length() / 1024} KB"
-        }.onFailure { status.text = "Saved GIF couldn't be read; choose another." }
+        val sizeText = "${file.length() / 1024} KB"
+        if (Prefs.isVideo(this)) {
+            preview.setImageDrawable(null)
+            videoPreview.visibility = View.VISIBLE
+            videoPreview.setOnPreparedListener { mp ->
+                mp.isLooping = true
+                mp.setVolume(0f, 0f)
+                videoPreview.start()
+            }
+            videoPreview.setOnErrorListener { _, _, _ ->
+                status.text = "Video saved, but the preview can't play it."
+                true
+            }
+            videoPreview.setVideoPath(file.path)
+            status.text = "Current video: $sizeText"
+        } else {
+            videoPreview.stopPlayback()
+            videoPreview.visibility = View.GONE
+            runCatching {
+                val d = ImageDecoder.decodeDrawable(ImageDecoder.createSource(file))
+                preview.setImageDrawable(d)
+                (d as? AnimatedImageDrawable)?.start()
+                status.text = "Current GIF: $sizeText"
+            }.onFailure { status.text = "Saved file couldn't be read; choose another." }
+        }
     }
 
     private fun setWallpaper() {
-        if (!Prefs.gifFile(this).exists()) {
-            toast("Choose a GIF first")
+        if (!Prefs.mediaFile(this).exists()) {
+            toast("Choose a GIF or video first")
             return
         }
         val component = ComponentName(this, GifWallpaperService::class.java)

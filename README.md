@@ -1,13 +1,13 @@
 # GIF Wallpaper
 
-A tiny Android app that plays any GIF (or animated WebP) as a live wallpaper. Built for the Galaxy S25+ (works on Android 9+).
+A tiny Android app that plays any GIF, animated WebP, or MP4 video as a live wallpaper. Built for the Galaxy S25+ (works on Android 9+).
 
 ## Install
 1. On your phone, open this repo's **Releases** page and download `GifWallpaper.apk` from the "latest" release.
 2. Open the file. If asked, allow your browser/My Files to "Install unknown apps".
 
 ## Use
-1. Open **GIF Wallpaper**, tap **Choose from Google Photos** (or **Choose from files**) and pick a GIF.
+1. Open **GIF Wallpaper**, tap **Choose from Google Photos** (or **Choose from files**) and pick a GIF or video. Videos play muted, on loop, and always fill the screen.
 2. Pick **Fill screen (crop)** or **Fit (no crop)**.
 3. Tap **Set as wallpaper** → **Set wallpaper** → choose Home screen or Home and lock screens.
 

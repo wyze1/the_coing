@@ -5,6 +5,8 @@ import android.graphics.Color
 import android.graphics.ImageDecoder
 import android.graphics.drawable.AnimatedImageDrawable
 import android.graphics.drawable.Drawable
+import android.media.AudioAttributes
+import android.media.MediaPlayer
 import android.os.Handler
 import android.os.Looper
 import android.service.wallpaper.WallpaperService
@@ -24,6 +26,10 @@ class GifWallpaperService : WallpaperService() {
         private val handler = Handler(Looper.getMainLooper())
         private val prefs = Prefs.get(this@GifWallpaperService)
         private var drawable: Drawable? = null
+        private var player: MediaPlayer? = null
+        private var isVideo = false
+        private var hasSurface = false
+        private var playerReady = false
         private var visible = false
         private var surfaceW = 0
         private var surfaceH = 0
@@ -45,15 +51,23 @@ class GifWallpaperService : WallpaperService() {
             drawFrame()
         }
 
+        override fun onSurfaceCreated(holder: SurfaceHolder) {
+            super.onSurfaceCreated(holder)
+            hasSurface = true
+            if (isVideo) startVideo()
+        }
+
         override fun onVisibilityChanged(isVisible: Boolean) {
             visible = isVisible
             val anim = drawable as? AnimatedImageDrawable
             if (isVisible) {
                 anim?.start()
+                if (playerReady) runCatching { player?.start() }
                 drawFrame()
             } else {
                 // Pause when the screen is off or an app covers the wallpaper.
                 anim?.stop()
+                if (playerReady) runCatching { player?.pause() }
                 handler.removeCallbacksAndMessages(null)
             }
         }
@@ -68,6 +82,8 @@ class GifWallpaperService : WallpaperService() {
 
         override fun onSurfaceDestroyed(holder: SurfaceHolder) {
             visible = false
+            hasSurface = false
+            releasePlayer()
             (drawable as? AnimatedImageDrawable)?.stop()
             handler.removeCallbacksAndMessages(null)
             super.onSurfaceDestroyed(holder)
@@ -75,8 +91,14 @@ class GifWallpaperService : WallpaperService() {
 
         private fun load() {
             release()
-            val file = Prefs.gifFile(this@GifWallpaperService)
+            val ctx = this@GifWallpaperService
+            val file = Prefs.mediaFile(ctx)
             if (!file.exists()) return
+            isVideo = Prefs.isVideo(ctx)
+            if (isVideo) {
+                if (hasSurface) startVideo()
+                return
+            }
             drawable = runCatching {
                 ImageDecoder.decodeDrawable(ImageDecoder.createSource(file))
             }.getOrNull()?.also { d ->
@@ -89,7 +111,42 @@ class GifWallpaperService : WallpaperService() {
             updateBounds()
         }
 
+        private fun startVideo() {
+            releasePlayer()
+            val file = Prefs.mediaFile(this@GifWallpaperService)
+            player = runCatching {
+                MediaPlayer().apply {
+                    setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE)
+                            .build()
+                    )
+                    setSurface(surfaceHolder.surface)
+                    setDataSource(file.path)
+                    isLooping = true
+                    setVolume(0f, 0f)
+                    // Videos always fill the screen (cropping the edges).
+                    setVideoScalingMode(MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING)
+                    setOnPreparedListener {
+                        playerReady = true
+                        if (visible) it.start()
+                    }
+                    setOnErrorListener { _, _, _ -> true }
+                    prepareAsync()
+                }
+            }.getOrNull()
+        }
+
+        private fun releasePlayer() {
+            player?.let { runCatching { it.reset() }; it.release() }
+            player = null
+            playerReady = false
+        }
+
         private fun release() {
+            releasePlayer()
+            isVideo = false
             handler.removeCallbacksAndMessages(null)
             drawable?.let {
                 (it as? AnimatedImageDrawable)?.stop()
@@ -115,7 +172,8 @@ class GifWallpaperService : WallpaperService() {
         }
 
         private fun drawFrame() {
-            if (!visible) return
+            // While a video is attached, MediaPlayer owns the surface.
+            if (!visible || isVideo) return
             val holder = surfaceHolder
             val canvas = try { holder.lockCanvas() } catch (e: Exception) { null } ?: return
             try {

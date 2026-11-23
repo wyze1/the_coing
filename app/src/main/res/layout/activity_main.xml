@@ -14,21 +14,33 @@
         android:textStyle="bold"
         android:layout_marginBottom="16dp" />
 
-    <ImageView
-        android:id="@+id/preview"
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:background="#000000"
-        android:scaleType="fitCenter"
-        android:contentDescription="Preview" />
+        android:background="#000000">
+
+        <ImageView
+            android:id="@+id/preview"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="fitCenter"
+            android:contentDescription="Preview" />
+
+        <VideoView
+            android:id="@+id/videoPreview"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:visibility="gone" />
+    </FrameLayout>
 
     <TextView
         android:id="@+id/status"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
-        android:text="No GIF chosen yet" />
+        android:text="Nothing chosen yet" />
 
     <RadioGroup
         android:id="@+id/scaleGroup"
