@@ -1,4 +1,4 @@
-name: Build APK
+name: Build
 
 on:
   push:
@@ -8,7 +8,7 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  android:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,14 +22,43 @@ jobs:
         run: cp app/build/outputs/apk/release/app-release.apk GifWallpaper.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: GifWallpaper
+          name: android
           path: GifWallpaper.apk
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Build
+        run: >
+          dotnet publish windows/GifWallpaper/GifWallpaper.csproj -c Release -r win-x64
+          --self-contained true -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true
+          -o out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: out/GifWallpaper.exe
+
+  release:
+    needs: [android, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
       - name: Publish to "latest" release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
           name: GIF Wallpaper (latest build)
-          body: Download GifWallpaper.apk on your phone and open it to install.
-          prerelease: false
+          body: |
+            **Phone (Android):** download GifWallpaper.apk on your phone and open it to install.
+            **Windows 11:** download GifWallpaper.exe and run it. It lives in the system tray (bottom-right, near the clock).
           make_latest: true
-          files: GifWallpaper.apk
+          files: |
+            GifWallpaper.apk
+            GifWallpaper.exe
