@@ -98,18 +98,6 @@ internal sealed class TrayApp : ApplicationContext
         _settings.Speed = sp;
         _settings.Save();
         UpdateSpeedChecks();
-
-        _zoomItem = new ToolStripMenuItem("Zoom");
-        _zoomItem.DropDownItems.Add("Zoom in", null, (_, _) => StepZoom(+1));
-        _zoomItem.DropDownItems.Add("Zoom out", null, (_, _) => StepZoom(-1));
-        _zoomItem.DropDownItems.Add(new ToolStripSeparator());
-        foreach (double z in Zooms)
-        {
-            var item = new ToolStripMenuItem(ZoomLabel(z) + (z == 1 ? " (normal)" : "")) { Tag = z };
-            item.Click += (_, _) => SetZoom(z);
-            _zoomItem.DropDownItems.Add(item);
-        }
-        UpdateZoomChecks();
         foreach (var f in _forms) f.SetSpeed(sp); // takes effect immediately, no reload
     }
 
