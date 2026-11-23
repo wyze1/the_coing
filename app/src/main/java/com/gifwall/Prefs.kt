@@ -9,6 +9,10 @@ object Prefs {
     const val KEY_VERSION = "version"
     const val KEY_SCALE = "scale"
     const val KEY_TYPE = "type"
+    const val KEY_SPEED = "speed"
+
+    /** Speed choices shown on the slider. */
+    val SPEEDS = floatArrayOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f)
     const val SCALE_FILL = "fill"
     const val SCALE_FIT = "fit"
     const val TYPE_IMAGE = "image"
@@ -27,6 +31,11 @@ object Prefs {
 
     fun scale(context: Context): String =
         get(context).getString(KEY_SCALE, SCALE_FILL) ?: SCALE_FILL
+
+    fun speed(context: Context): Float = get(context).getFloat(KEY_SPEED, 1f)
+
+    fun speedLabel(speed: Float): String =
+        (if (speed % 1f == 0f) speed.toInt().toString() else speed.toString()) + "×"
 
     /** Tell any running wallpaper engine to reload. */
     fun bumpVersion(context: Context) {

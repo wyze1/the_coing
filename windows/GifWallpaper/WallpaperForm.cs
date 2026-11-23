@@ -6,8 +6,7 @@ namespace GifWallpaper;
 /// <summary>One borderless window per monitor, sitting behind the desktop icons.</summary>
 internal sealed class WallpaperForm : Form
 {
-    private const string PageHost = "app.gifwallpaper";
-    private const string MediaHost = "media.gifwallpaper";
+    private const string Host = "app.gifwallpaper";
 
     private readonly WebView2 _web = new() { Dock = DockStyle.Fill };
     public Screen TargetScreen { get; }
@@ -37,23 +36,28 @@ internal sealed class WallpaperForm : Form
 
     protected override bool ShowWithoutActivation => true;
 
-    public async Task LoadAsync(CoreWebView2Environment env, string pageFolder, string mediaPath, bool fit)
+    /// <param name="mediaName">File name of the media copy inside <paramref name="pageFolder"/>.</param>
+    public async Task LoadAsync(CoreWebView2Environment env, string pageFolder, string mediaName, bool fit, double speed)
     {
         await _web.EnsureCoreWebView2Async(env);
         var core = _web.CoreWebView2;
         core.Settings.AreDefaultContextMenusEnabled = false;
         core.Settings.AreDevToolsEnabled = false;
         core.Settings.IsStatusBarEnabled = false;
-        core.SetVirtualHostNameToFolderMapping(PageHost, pageFolder, CoreWebView2HostResourceAccessKind.Allow);
-        core.SetVirtualHostNameToFolderMapping(MediaHost, Path.GetDirectoryName(mediaPath)!,
-            CoreWebView2HostResourceAccessKind.Allow);
+        // Page and media are served from the same folder, so the page may read the GIF's bytes.
+        core.SetVirtualHostNameToFolderMapping(Host, pageFolder, CoreWebView2HostResourceAccessKind.Allow);
 
-        string src = $"https://{MediaHost}/{Uri.EscapeDataString(Path.GetFileName(mediaPath))}";
-        bool video = !mediaPath.EndsWith(".gif", StringComparison.OrdinalIgnoreCase)
-                     && !mediaPath.EndsWith(".webp", StringComparison.OrdinalIgnoreCase);
-        core.Navigate($"https://{PageHost}/index.html#src={Uri.EscapeDataString(src)}" +
-                      $"&fit={(fit ? 1 : 0)}&video={(video ? 1 : 0)}");
+        string src = $"https://{Host}/{Uri.EscapeDataString(mediaName)}";
+        bool video = !mediaName.EndsWith(".gif", StringComparison.OrdinalIgnoreCase)
+                     && !mediaName.EndsWith(".webp", StringComparison.OrdinalIgnoreCase);
+        core.Navigate($"https://{Host}/index.html#src={Uri.EscapeDataString(src)}" +
+                      $"&fit={(fit ? 1 : 0)}&video={(video ? 1 : 0)}&speed={Num(speed)}");
     }
+
+    public void SetSpeed(double speed) =>
+        _ = _web.CoreWebView2?.ExecuteScriptAsync($"setSpeed({Num(speed)})");
+
+    private static string Num(double d) => d.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     public void SetPaused(bool paused)
     {
@@ -74,19 +78,73 @@ internal sealed class WallpaperForm : Form
 <script>
   const p = new URLSearchParams(location.hash.slice(1));
   if (p.get('fit') === '1') document.body.classList.add('fit');
+  const src = p.get('src');
+  let speed = parseFloat(p.get('speed') || '1') || 1;
+  let paused = false, resume = null;
   let el;
-  if (p.get('video') === '1') {
-    el = document.createElement('video');
-    el.muted = true; el.loop = true; el.autoplay = true; el.playsInline = true;
-  } else {
-    el = document.createElement('img');
+
+  function setSpeed(s) { speed = s; if (el && el.tagName === 'VIDEO') el.playbackRate = s; }
+  function pauseMedia() { paused = true; if (el && el.tagName === 'VIDEO') el.pause(); }
+  function playMedia() {
+    paused = false;
+    if (el && el.tagName === 'VIDEO') el.play();
+    if (resume) { resume(); resume = null; }
   }
-  el.id = 'm';
-  el.src = p.get('src');
-  document.body.appendChild(el);
-  // GIFs can't be paused in an <img>, so hide them (stops rendering) instead.
-  function pauseMedia(){ if (el.pause) el.pause(); else el.style.visibility='hidden'; }
-  function playMedia(){ if (el.play) el.play(); else el.style.visibility='visible'; }
+
+  function show(node) { node.id = 'm'; el = node; document.body.appendChild(node); }
+
+  function plainImage() {
+    const img = document.createElement('img');
+    img.src = src;
+    show(img);
+  }
+
+  // Draw GIF / animated WebP frames ourselves so the speed can be changed.
+  async function animatedImage() {
+    if (!('ImageDecoder' in window)) return plainImage();
+    try {
+      const resp = await fetch(src);
+      const type = src.toLowerCase().endsWith('.webp') ? 'image/webp' : 'image/gif';
+      const dec = new ImageDecoder({ data: resp.body, type });
+      await dec.tracks.ready;
+      await dec.completed;
+      const count = dec.tracks.selectedTrack.frameCount;
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      show(canvas);
+      let i = 0;
+      for (;;) {
+        if (paused) await new Promise(r => resume = r);
+        const t0 = performance.now();
+        const { image } = await dec.decode({ frameIndex: i });
+        if (canvas.width !== image.displayWidth || canvas.height !== image.displayHeight) {
+          canvas.width = image.displayWidth;
+          canvas.height = image.displayHeight;
+        }
+        ctx.drawImage(image, 0, 0);
+        let ms = (image.duration ?? 100000) / 1000;
+        if (ms <= 10) ms = 100; // same rule browsers use for very short GIF delays
+        image.close();
+        if (count <= 1) return;
+        i = (i + 1) % count;
+        const wait = ms / speed - (performance.now() - t0);
+        await new Promise(r => setTimeout(r, Math.max(0, wait)));
+      }
+    } catch (e) {
+      if (!el) plainImage();
+    }
+  }
+
+  if (p.get('video') === '1') {
+    const v = document.createElement('video');
+    v.muted = true; v.loop = true; v.autoplay = true; v.playsInline = true;
+    v.src = src;
+    v.playbackRate = speed;
+    v.addEventListener('loadedmetadata', () => v.playbackRate = speed);
+    show(v);
+  } else {
+    animatedImage();
+  }
 </script>
 </body></html>
 """;

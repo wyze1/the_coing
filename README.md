@@ -8,7 +8,7 @@ A tiny Android app that plays any GIF, animated WebP, or MP4 video as a live wal
 
 ## Use
 1. Open **GIF Wallpaper**, tap **Choose from Google Photos** (or **Choose from files**) and pick a GIF or video. Videos play muted, on loop, and always fill the screen.
-2. Pick **Fill screen (crop)** or **Fit (no crop)**.
+2. Pick **Fill screen (crop)** or **Fit (no crop)**, and drag the **Speed** slider (0.25× to 3×).
 3. Tap **Set as wallpaper** → **Set wallpaper** → choose Home screen or Home and lock screens.
 
 To change the GIF later, just open the app and choose a new one; the wallpaper updates right away.
@@ -23,7 +23,7 @@ A tray app that plays a GIF or video (MP4, WebM, MOV) behind your desktop icons,
 
 1. Download `GifWallpaper.exe` from the "latest" release and run it. If SmartScreen warns you, click **More info → Run anyway** (the app isn't code-signed).
 2. Pick a GIF or video. It starts playing behind your icons.
-3. Right-click the tray icon (near the clock) for: **Choose GIF or video…**, **Fit (no crop)**, **Start with Windows**, **Exit**.
+3. Right-click the tray icon (near the clock) for: **Choose GIF or video…**, **Speed** (0.25× to 3×), **Fit (no crop)**, **Start with Windows**, **Exit**.
 
 The animation pauses on any monitor where a maximized or full-screen app covers it. Exiting restores your normal wallpaper.
 Source is in `windows/GifWallpaper` (C#/.NET 8 + WebView2).

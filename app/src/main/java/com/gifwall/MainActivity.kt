@@ -14,6 +14,7 @@ import android.view.View
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.RadioGroup
+import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import android.widget.VideoView
@@ -39,6 +40,26 @@ class MainActivity : Activity() {
             Prefs.get(this).edit().putString(Prefs.KEY_SCALE, mode).apply()
             Prefs.bumpVersion(this)
         }
+
+        val speedLabel = findViewById<TextView>(R.id.speedLabel)
+        val speedBar = findViewById<SeekBar>(R.id.speedBar)
+        val speeds = Prefs.SPEEDS
+        speedBar.max = speeds.size - 1
+        val current = Prefs.speed(this)
+        speedBar.progress = speeds.indices.minByOrNull { kotlin.math.abs(speeds[it] - current) } ?: 3
+        speedLabel.text = "Speed: ${Prefs.speedLabel(speeds[speedBar.progress])}"
+        speedBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(bar: SeekBar, progress: Int, fromUser: Boolean) {
+                speedLabel.text = "Speed: ${Prefs.speedLabel(speeds[progress])}"
+            }
+            override fun onStartTrackingTouch(bar: SeekBar) {}
+            override fun onStopTrackingTouch(bar: SeekBar) {
+                // Saved when the finger lifts, so the wallpaper reloads once, not on every step.
+                Prefs.get(this@MainActivity).edit()
+                    .putFloat(Prefs.KEY_SPEED, speeds[bar.progress]).apply()
+                applyPreviewSpeed()
+            }
+        })
 
         findViewById<Button>(R.id.photosButton).setOnClickListener { pickFromGooglePhotos() }
         findViewById<Button>(R.id.pickButton).setOnClickListener { pickFile() }
@@ -151,7 +172,9 @@ class MainActivity : Activity() {
             videoPreview.setOnPreparedListener { mp ->
                 mp.isLooping = true
                 mp.setVolume(0f, 0f)
+                previewPlayer = mp
                 videoPreview.start()
+                applyPreviewSpeed()
             }
             videoPreview.setOnErrorListener { _, _, _ ->
                 status.text = "Video saved, but the preview can't play it."
@@ -160,6 +183,7 @@ class MainActivity : Activity() {
             videoPreview.setVideoPath(file.path)
             status.text = "Current video: $sizeText"
         } else {
+            previewPlayer = null
             videoPreview.stopPlayback()
             videoPreview.visibility = View.GONE
             runCatching {
@@ -169,6 +193,15 @@ class MainActivity : Activity() {
                 status.text = "Current GIF: $sizeText"
             }.onFailure { status.text = "Saved file couldn't be read; choose another." }
         }
+    }
+
+    private var previewPlayer: android.media.MediaPlayer? = null
+
+    /** The video preview follows the speed setting (the GIF preview always plays at 1×). */
+    private fun applyPreviewSpeed() {
+        val mp = previewPlayer ?: return
+        if (videoPreview.visibility != View.VISIBLE) return
+        runCatching { mp.playbackParams = mp.playbackParams.setSpeed(Prefs.speed(this)) }
     }
 
     private fun setWallpaper() {

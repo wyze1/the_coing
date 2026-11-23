@@ -11,7 +11,8 @@ internal sealed class TrayApp : ApplicationContext
 
     private readonly Settings _settings = Settings.Load();
     private readonly NotifyIcon _tray;
-    private readonly ToolStripMenuItem _fitItem, _startupItem;
+    private static readonly double[] Speeds = { 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3 };
+    private readonly ToolStripMenuItem _fitItem, _startupItem, _speedItem;
     private readonly List<WallpaperForm> _forms = new();
     private readonly System.Windows.Forms.Timer _coverTimer = new() { Interval = 1500 };
     private readonly ExplorerWatcher _watcher;
@@ -25,8 +26,18 @@ internal sealed class TrayApp : ApplicationContext
         _startupItem = new ToolStripMenuItem("Start with Windows", null, (_, _) => ToggleStartup())
             { Checked = IsStartupEnabled() };
 
+        _speedItem = new ToolStripMenuItem("Speed");
+        foreach (double sp in Speeds)
+        {
+            var item = new ToolStripMenuItem(SpeedLabel(sp)) { Tag = sp };
+            item.Click += (_, _) => SetSpeed(sp);
+            _speedItem.DropDownItems.Add(item);
+        }
+        UpdateSpeedChecks();
+
         var menu = new ContextMenuStrip();
         menu.Items.Add("Choose GIF or video…", null, (_, _) => ChooseFile());
+        menu.Items.Add(_speedItem);
         menu.Items.Add(_fitItem);
         menu.Items.Add(_startupItem);
         menu.Items.Add(new ToolStripSeparator());
@@ -63,6 +74,24 @@ internal sealed class TrayApp : ApplicationContext
         _settings.MediaPath = dlg.FileName;
         _settings.Save();
         _ = RebuildAsync();
+    }
+
+    private static string SpeedLabel(double sp) =>
+        sp.ToString(System.Globalization.CultureInfo.InvariantCulture) + "×" + (sp == 1 ? " (normal)" : "");
+
+    private void SetSpeed(double sp)
+    {
+        _settings.Speed = sp;
+        _settings.Save();
+        UpdateSpeedChecks();
+        foreach (var f in _forms) f.SetSpeed(sp); // takes effect immediately, no reload
+    }
+
+    private void UpdateSpeedChecks()
+    {
+        foreach (ToolStripMenuItem item in _speedItem.DropDownItems)
+            item.Checked = Math.Abs((double)item.Tag! - _settings.Speed) < 0.001;
+        _speedItem.Text = $"Speed ({SpeedLabel(_settings.Speed).Replace(" (normal)", "")})";
     }
 
     private void ToggleFit()
@@ -107,6 +136,16 @@ internal sealed class TrayApp : ApplicationContext
             string pageFolder = Path.Combine(Settings.Folder, "page");
             Directory.CreateDirectory(pageFolder);
             File.WriteAllText(Path.Combine(pageFolder, "index.html"), WallpaperForm.PageHtml);
+            string mediaName;
+            try
+            {
+                mediaName = await Task.Run(() => CopyMedia(path, pageFolder));
+            }
+            catch (Exception ex)
+            {
+                _tray.ShowBalloonTip(5000, "GIF Wallpaper", "Couldn't read that file: " + ex.Message, ToolTipIcon.Error);
+                return;
+            }
 
             try
             {
@@ -128,7 +167,7 @@ internal sealed class TrayApp : ApplicationContext
                 form.Show();
                 Desktop.Place(form.Handle, screen.Bounds);
                 _forms.Add(form);
-                await form.LoadAsync(_env, pageFolder, path, _settings.Fit);
+                await form.LoadAsync(_env, pageFolder, mediaName, _settings.Fit, _settings.Speed);
             }
         }
         finally
@@ -136,6 +175,25 @@ internal sealed class TrayApp : ApplicationContext
             _rebuilding = false;
             if (_pending) { _pending = false; _ = RebuildAsync(); }
         }
+    }
+
+    /// <summary>
+    /// Copies the chosen file next to the page (skipped if already copied), so both are served
+    /// from one place. Returns the copy's file name.
+    /// </summary>
+    private static string CopyMedia(string source, string pageFolder)
+    {
+        var info = new FileInfo(source);
+        string name = "media-" + (info.Length ^ info.LastWriteTimeUtc.Ticks).ToString("x") +
+                      info.Extension.ToLowerInvariant();
+        string dest = Path.Combine(pageFolder, name);
+        if (!File.Exists(dest))
+        {
+            foreach (var old in Directory.GetFiles(pageFolder, "media-*")) File.Delete(old);
+            File.Copy(source, dest + ".tmp", true);
+            File.Move(dest + ".tmp", dest, true);
+        }
+        return name;
     }
 
     private void CloseForms()
