@@ -35,10 +35,29 @@ class MainActivity : Activity() {
             Prefs.bumpVersion(this)
         }
 
+        findViewById<Button>(R.id.photosButton).setOnClickListener { pickFromGooglePhotos() }
         findViewById<Button>(R.id.pickButton).setOnClickListener { pickGif() }
         findViewById<Button>(R.id.setButton).setOnClickListener { setWallpaper() }
 
         showPreview()
+    }
+
+    /** Opens Google Photos directly (includes cloud-only photos, no settings needed). */
+    private fun pickFromGooglePhotos() {
+        val attempts = listOf(
+            Intent(Intent.ACTION_GET_CONTENT).setType("image/*"),
+            Intent(Intent.ACTION_PICK).setType("image/*"),
+        )
+        for (intent in attempts) {
+            intent.setPackage(GOOGLE_PHOTOS)
+            try {
+                startActivityForResult(intent, REQ_PICK)
+                return
+            } catch (_: ActivityNotFoundException) {
+            }
+        }
+        toast("Google Photos isn't installed. Opening the file picker instead.")
+        pickGif()
     }
 
     private fun pickGif() {
@@ -71,14 +90,19 @@ class MainActivity : Activity() {
                     tmp.outputStream().use { input.copyTo(it) }
                 }
                 // Make sure it actually decodes before replacing the current one.
-                ImageDecoder.decodeDrawable(ImageDecoder.createSource(tmp))
+                val d = ImageDecoder.decodeDrawable(ImageDecoder.createSource(tmp))
                 if (!tmp.renameTo(dest)) error("Could not save file")
+                d is AnimatedImageDrawable
             }
             runOnUiThread {
                 if (result.isSuccess) {
                     Prefs.bumpVersion(this)
                     showPreview()
-                    toast("GIF saved. Tap \"Set as wallpaper\".")
+                    if (result.getOrNull() == true) {
+                        toast("GIF saved. Tap \"Set as wallpaper\".")
+                    } else {
+                        toast("Saved, but that image isn't animated, so it will be a still wallpaper.")
+                    }
                 } else {
                     status.text = "Couldn't open that file: ${result.exceptionOrNull()?.message}"
                 }
@@ -121,5 +145,6 @@ class MainActivity : Activity() {
 
     companion object {
         private const val REQ_PICK = 1
+        private const val GOOGLE_PHOTOS = "com.google.android.apps.photos"
     }
 }

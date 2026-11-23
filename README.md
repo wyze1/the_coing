@@ -7,7 +7,7 @@ A tiny Android app that plays any GIF (or animated WebP) as a live wallpaper. Bu
 2. Open the file. If asked, allow your browser/My Files to "Install unknown apps".
 
 ## Use
-1. Open **GIF Wallpaper**, tap **Choose GIF**, pick a file.
+1. Open **GIF Wallpaper**, tap **Choose from Google Photos** (or **Choose from files**) and pick a GIF.
 2. Pick **Fill screen (crop)** or **Fit (no crop)**.
 3. Tap **Set as wallpaper** → **Set wallpaper** → choose Home screen or Home and lock screens.
 
