@@ -16,7 +16,6 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - uses: android-actions/setup-android@v3
       - name: Build
         run: chmod +x gradlew && ./gradlew --no-daemon assembleRelease
       - name: Rename APK
