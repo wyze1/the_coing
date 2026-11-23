@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">GIF Wallpaper</string>
+    <string name="wallpaper_description">Plays a GIF of your choice as your wallpaper</string>
+</resources>
