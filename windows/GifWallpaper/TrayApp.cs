@@ -65,6 +65,10 @@ internal sealed class TrayApp : ApplicationContext
         UpdateZoomChecks();
 
         var menu = new ContextMenuStrip();
+        var settingsItem = new ToolStripMenuItem("Settings…", null, (_, _) => OpenSettings());
+        settingsItem.Font = new Font(settingsItem.Font, FontStyle.Bold); // default (double-click) action
+        menu.Items.Add(settingsItem);
+        menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Choose GIF or video…", null, (_, _) => ChooseFile());
         menu.Items.Add(_speedItem);
         menu.Items.Add(_zoomItem);
@@ -139,7 +143,7 @@ internal sealed class TrayApp : ApplicationContext
             ContextMenuStrip = menu,
             Visible = true,
         };
-        _tray.DoubleClick += (_, _) => ChooseFile();
+        _tray.DoubleClick += (_, _) => OpenSettings();
 
         _watcher = new ExplorerWatcher(() => _ = RebuildAsync());
         SystemEvents.DisplaySettingsChanged += (_, _) => _ = RebuildAsync();
@@ -149,17 +153,40 @@ internal sealed class TrayApp : ApplicationContext
         if (_settings.MediaPath != null && File.Exists(_settings.MediaPath))
             _ = RebuildAsync();
         else
+        {
             ChooseFile();
+            OpenSettings();
+        }
     }
 
     /// <summary>The app icon at the size the tray wants (sharp at any display scaling).</summary>
-    private static Icon LoadTrayIcon()
+    private static Icon LoadTrayIcon() => AppIcon(SystemInformation.SmallIconSize.Width);
+
+    /// <summary>The app icon at (about) the given pixel size.</summary>
+    internal static Icon AppIcon(int size)
     {
         using var stream = typeof(TrayApp).Assembly.GetManifestResourceStream("app.ico");
-        return stream != null ? new Icon(stream, SystemInformation.SmallIconSize) : SystemIcons.Application;
+        return stream != null ? new Icon(stream, size, size) : SystemIcons.Application;
     }
 
-    private void ChooseFile()
+    internal Settings Current => _settings;
+
+    private SettingsForm? _settingsForm;
+
+    /// <summary>Opens the settings window (or brings it to the front if already open).</summary>
+    internal void OpenSettings()
+    {
+        if (_settingsForm == null || _settingsForm.IsDisposed)
+        {
+            _settingsForm = new SettingsForm(this);
+            _settingsForm.Show();
+        }
+        if (_settingsForm.WindowState == FormWindowState.Minimized)
+            _settingsForm.WindowState = FormWindowState.Normal;
+        _settingsForm.Activate();
+    }
+
+    internal void ChooseFile()
     {
         using var dlg = new OpenFileDialog
         {
@@ -175,8 +202,9 @@ internal sealed class TrayApp : ApplicationContext
     private static string SpeedLabel(double sp) =>
         sp.ToString(System.Globalization.CultureInfo.InvariantCulture) + "×" + (sp == 1 ? " (normal)" : "");
 
-    private void SetSpeed(double sp)
+    internal void SetSpeed(double sp)
     {
+        sp = Math.Round(Math.Clamp(sp, 0.1, 5.0), 2);
         _settings.Speed = sp;
         _settings.Save();
         UpdateSpeedChecks();
@@ -192,8 +220,9 @@ internal sealed class TrayApp : ApplicationContext
 
     private static string ZoomLabel(double z) => $"{Math.Round(z * 100)}%";
 
-    private void SetZoom(double z)
+    internal void SetZoom(double z)
     {
+        z = Math.Round(Math.Clamp(z, 0.1, 10.0), 3);
         _settings.Zoom = z;
         _settings.Save();
         UpdateZoomChecks();
@@ -219,9 +248,9 @@ internal sealed class TrayApp : ApplicationContext
 
     private static string BrightLabel(double b) => $"{Math.Round(b * 100)}%";
 
-    private void SetBrightness(double b)
+    internal void SetBrightness(double b)
     {
-        b = Math.Round(Math.Clamp(b, 0.2, 2.0), 2);
+        b = Math.Round(Math.Clamp(b, 0, 3.0), 3);
         _settings.Brightness = b;
         _settings.Save();
         UpdateBrightChecks();
@@ -235,9 +264,9 @@ internal sealed class TrayApp : ApplicationContext
         _brightItem.Text = $"Brightness ({BrightLabel(_settings.Brightness)})";
     }
 
-    private void SetSaturation(double s)
+    internal void SetSaturation(double s)
     {
-        s = Math.Round(Math.Clamp(s, 0, 2.0), 2);
+        s = Math.Round(Math.Clamp(s, 0, 4.0), 3);
         _settings.Saturation = s;
         _settings.Save();
         UpdateSatChecks();
@@ -251,10 +280,10 @@ internal sealed class TrayApp : ApplicationContext
         _satItem.Text = $"Saturation ({BrightLabel(_settings.Saturation)})";
     }
 
-    private void MovePan(double dx, double dy)
+    internal void MovePan(double dx, double dy)
     {
-        _settings.PanX = Math.Round(Math.Clamp(_settings.PanX + dx, -0.5, 0.5), 2);
-        _settings.PanY = Math.Round(Math.Clamp(_settings.PanY + dy, -0.5, 0.5), 2);
+        _settings.PanX = Math.Round(Math.Clamp(_settings.PanX + dx, -1, 1), 3);
+        _settings.PanY = Math.Round(Math.Clamp(_settings.PanY + dy, -1, 1), 3);
         _settings.Save();
         UpdatePanText();
         foreach (var f in _forms) f.SetPan(_settings.PanX, _settings.PanY); // instant
@@ -267,7 +296,7 @@ internal sealed class TrayApp : ApplicationContext
 
     private static string HueLabel(int deg) => deg == 0 ? "Normal" : (deg > 0 ? "+" : "−") + Math.Abs(deg) + "°";
 
-    private void SetHue(int deg)
+    internal void SetHue(int deg)
     {
         // Keep within -180..180 so it wraps around the color wheel.
         deg = ((deg + 180) % 360 + 360) % 360 - 180;
@@ -284,34 +313,42 @@ internal sealed class TrayApp : ApplicationContext
         _hueItem.Text = $"Hue ({HueLabel(_settings.Hue)})";
     }
 
-    private void ToggleFlip(bool h)
+    private void ToggleFlip(bool h) =>
+        SetFlip(h ? !_settings.FlipH : _settings.FlipH, h ? _settings.FlipV : !_settings.FlipV);
+
+    internal void SetFlip(bool flipH, bool flipV)
     {
-        if (h) _settings.FlipH = !_settings.FlipH; else _settings.FlipV = !_settings.FlipV;
+        _settings.FlipH = flipH;
+        _settings.FlipV = flipV;
         _settings.Save();
         _flipHItem.Checked = _settings.FlipH;
         _flipVItem.Checked = _settings.FlipV;
         foreach (var f in _forms) f.SetFlip(_settings.FlipH, _settings.FlipV); // instant
     }
 
-    private void ToggleFit()
+    private void ToggleFit() => SetFit(!_settings.Fit);
+
+    internal void SetFit(bool fit)
     {
-        _settings.Fit = !_settings.Fit;
-        _fitItem.Checked = _settings.Fit;
+        _settings.Fit = fit;
+        _fitItem.Checked = fit;
         _settings.Save();
-        _ = RebuildAsync();
+        foreach (var f in _forms) f.SetFit(fit); // instant
     }
 
-    private static bool IsStartupEnabled()
+    internal static bool IsStartupEnabled()
     {
         using var key = Registry.CurrentUser.OpenSubKey(RunKey);
         return key?.GetValue(RunName) != null;
     }
 
-    private void ToggleStartup()
+    private void ToggleStartup() => SetStartup(!IsStartupEnabled());
+
+    internal void SetStartup(bool on)
     {
         using var key = Registry.CurrentUser.CreateSubKey(RunKey);
-        if (IsStartupEnabled()) key.DeleteValue(RunName, false);
-        else SetStartupPath();
+        if (on) SetStartupPath();
+        else key.DeleteValue(RunName, false);
         _startupItem.Checked = IsStartupEnabled();
     }
 
@@ -436,6 +473,7 @@ internal sealed class TrayApp : ApplicationContext
     private void ExitApp()
     {
         _coverTimer.Stop();
+        _settingsForm?.Close();
         CloseForms();
         Desktop.RefreshStaticWallpaper();
         _tray.Visible = false;

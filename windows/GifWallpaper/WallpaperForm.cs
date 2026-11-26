@@ -56,6 +56,9 @@ internal sealed class WallpaperForm : Form
                       $"&sat={Num(saturation)}&px={Num(panX)}&py={Num(panY)}");
     }
 
+    public void SetFit(bool fit) =>
+        _ = _web.CoreWebView2?.ExecuteScriptAsync($"setFit({(fit ? "true" : "false")})");
+
     public void SetFlip(bool h, bool v) =>
         _ = _web.CoreWebView2?.ExecuteScriptAsync($"setFlip({(h ? "true" : "false")},{(v ? "true" : "false")})");
 
@@ -97,7 +100,8 @@ internal sealed class WallpaperForm : Form
 <body>
 <script>
   const p = new URLSearchParams(location.hash.slice(1));
-  if (p.get('fit') === '1') document.body.classList.add('fit');
+  function setFit(f) { document.body.classList.toggle('fit', f); }
+  setFit(p.get('fit') === '1');
   const src = p.get('src');
   let speed = parseFloat(p.get('speed') || '1') || 1;
   let paused = false, resume = null;
