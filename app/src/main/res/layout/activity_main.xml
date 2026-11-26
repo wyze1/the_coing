@@ -59,147 +59,12 @@
             android:text="Fit (no crop)" />
     </RadioGroup>
 
+    <!-- Sliders are added here in code (MainActivity.buildSliders). -->
     <LinearLayout
+        android:id="@+id/sliders"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
-
-        <TextView
-            android:id="@+id/zoomLabel"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Zoom: 100%" />
-
-        <Button
-            android:id="@+id/zoomReset"
-            style="?android:attr/buttonStyleSmall"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Reset zoom" />
-    </LinearLayout>
-
-    <SeekBar
-        android:id="@+id/zoomBar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
-
-        <TextView
-            android:id="@+id/hueLabel"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Hue: normal" />
-
-        <Button
-            android:id="@+id/hueReset"
-            style="?android:attr/buttonStyleSmall"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Reset hue" />
-    </LinearLayout>
-
-    <SeekBar
-        android:id="@+id/hueBar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
-
-        <TextView
-            android:id="@+id/brightLabel"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Brightness: 100%" />
-
-        <Button
-            android:id="@+id/brightReset"
-            style="?android:attr/buttonStyleSmall"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Reset brightness" />
-    </LinearLayout>
-
-    <SeekBar
-        android:id="@+id/brightBar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
-
-        <TextView
-            android:id="@+id/satLabel"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Saturation: 100%" />
-
-        <Button
-            android:id="@+id/satReset"
-            style="?android:attr/buttonStyleSmall"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Reset saturation" />
-    </LinearLayout>
-
-    <SeekBar
-        android:id="@+id/satBar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
-
-        <TextView
-            android:id="@+id/panXLabel"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Pan left/right: center" />
-
-        <Button
-            android:id="@+id/panXReset"
-            style="?android:attr/buttonStyleSmall"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Center" />
-    </LinearLayout>
-
-    <SeekBar
-        android:id="@+id/panXBar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
-
-    <SeekBar
-        android:id="@+id/panYBar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
-
-    <TextView
-        android:id="@+id/panYLabel"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Pan up/down: center" />
+        android:orientation="vertical" />
 
     <TextView
         android:layout_width="wrap_content"
@@ -207,11 +72,12 @@
         android:layout_marginTop="4dp"
         android:textSize="12sp"
         android:alpha="0.7"
-        android:text="Tip: drag the preview with your finger to pan." />
+        android:text="Tip: drag the preview with your finger to pan. Use − / + for fine steps." />
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
         android:orientation="horizontal">
 
         <Switch
@@ -229,18 +95,6 @@
             android:layout_weight="1"
             android:text="Flip ↕" />
     </LinearLayout>
-
-    <TextView
-        android:id="@+id/speedLabel"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="Speed: 1×" />
-
-    <SeekBar
-        android:id="@+id/speedBar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
 
     <Button
         android:id="@+id/photosButton"

@@ -12,7 +12,7 @@ import kotlin.math.sin
 object Hue {
     /** 3x3 matrix, row-major: out.rgb = M * in.rgb */
     /** Combined matrix for CSS `hue-rotate() brightness() saturate()` (applied in that order). */
-    fun rows(degrees: Int, brightness: Float = 1f, saturation: Float = 1f): FloatArray {
+    fun rows(degrees: Float, brightness: Float = 1f, saturation: Float = 1f): FloatArray {
         val h = hueRows(degrees)
         val s = saturation
         val sat = floatArrayOf(
@@ -28,7 +28,7 @@ object Hue {
         }
     }
 
-    private fun hueRows(degrees: Int): FloatArray {
+    private fun hueRows(degrees: Float): FloatArray {
         val a = Math.toRadians(degrees.toDouble())
         val c = cos(a).toFloat()
         val s = sin(a).toFloat()
@@ -40,14 +40,14 @@ object Hue {
     }
 
     /** Column-major copy for OpenGL. */
-    fun columns(degrees: Int, brightness: Float = 1f, saturation: Float = 1f): FloatArray {
+    fun columns(degrees: Float, brightness: Float = 1f, saturation: Float = 1f): FloatArray {
         val r = rows(degrees, brightness, saturation)
         return FloatArray(9) { i -> r[(i % 3) * 3 + i / 3] }
     }
 
     /** Color filter for Canvas / drawables, or null when there is no shift. */
-    fun filter(degrees: Int, brightness: Float = 1f, saturation: Float = 1f): ColorMatrixColorFilter? {
-        if (degrees == 0 && brightness == 1f && saturation == 1f) return null
+    fun filter(degrees: Float, brightness: Float = 1f, saturation: Float = 1f): ColorMatrixColorFilter? {
+        if (degrees == 0f && brightness == 1f && saturation == 1f) return null
         val r = rows(degrees, brightness, saturation)
         return ColorMatrixColorFilter(ColorMatrix(floatArrayOf(
             r[0], r[1], r[2], 0f, 0f,
@@ -59,5 +59,6 @@ object Hue {
 
     fun brightnessLabel(b: Float) = "Brightness: ${Math.round(b * 100)}%"
 
-    fun label(degrees: Int) = if (degrees == 0) "Hue: normal" else "Hue: ${if (degrees > 0) "+" else ""}$degrees°"
+    fun label(degrees: Float) =
+        if (degrees == 0f) "Hue: normal" else "Hue: ${if (degrees > 0) "+" else ""}${Fmt.num(degrees)}°"
 }

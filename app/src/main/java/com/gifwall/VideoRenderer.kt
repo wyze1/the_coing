@@ -52,7 +52,7 @@ class VideoRenderer(private val output: Surface, private val file: File) {
     private var flipV = false
     private var panX = 0f
     private var panY = 0f
-    private var hue = Hue.columns(0)
+    private var hue = Hue.columns(0f)
     private var speed = 1f
 
     private val texMatrix = FloatArray(16)

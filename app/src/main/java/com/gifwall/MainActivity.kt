@@ -41,35 +41,7 @@ class MainActivity : Activity() {
             Prefs.get(this).edit().putString(Prefs.KEY_SCALE, mode).apply()
         }
 
-        // All "look" sliders update the wallpaper live while dragging.
-        slider(R.id.zoomLabel, R.id.zoomBar, R.id.zoomReset, 50, 300, 100,
-            get = { Math.round(Prefs.zoom(this) * 100) },
-            save = { putFloat(Prefs.KEY_ZOOM, it / 100f) },
-            label = { "Zoom: $it%" })
-        slider(R.id.hueLabel, R.id.hueBar, R.id.hueReset, -180, 180, 0,
-            get = { Prefs.hue(this) },
-            save = { putInt(Prefs.KEY_HUE, it) },
-            label = { Hue.label(it) })
-        slider(R.id.brightLabel, R.id.brightBar, R.id.brightReset, 20, 200, 100,
-            get = { Math.round(Prefs.brightness(this) * 100) },
-            save = { putFloat(Prefs.KEY_BRIGHTNESS, it / 100f) },
-            label = { "Brightness: $it%" })
-        slider(R.id.satLabel, R.id.satBar, R.id.satReset, 0, 200, 100,
-            get = { Math.round(Prefs.saturation(this) * 100) },
-            save = { putFloat(Prefs.KEY_SATURATION, it / 100f) },
-            label = { if (it == 0) "Saturation: 0% (black & white)" else "Saturation: $it%" })
-        panXBar = slider(R.id.panXLabel, R.id.panXBar, null, -50, 50, 0,
-            get = { Math.round(Prefs.panX(this) * 100) },
-            save = { putFloat(Prefs.KEY_PAN_X, it / 100f) },
-            label = { panLabel("Pan left/right", it, "left", "right") })
-        panYBar = slider(R.id.panYLabel, R.id.panYBar, null, -50, 50, 0,
-            get = { Math.round(Prefs.panY(this) * 100) },
-            save = { putFloat(Prefs.KEY_PAN_Y, it / 100f) },
-            label = { panLabel("Pan up/down", it, "up", "down") })
-        findViewById<Button>(R.id.panXReset).setOnClickListener {
-            panXBar.progress = 50
-            panYBar.progress = 50
-        }
+        buildSliders()
         setupPreviewDrag()
 
         listOf(R.id.flipH to Prefs.KEY_FLIP_H, R.id.flipV to Prefs.KEY_FLIP_V).forEach { (id, key) ->
@@ -82,26 +54,6 @@ class MainActivity : Activity() {
         }
         // Pan needs the preview's size, which is known only after layout.
         findViewById<View>(R.id.previewFrame).post { refreshPreviewLook() }
-
-        val speedLabel = findViewById<TextView>(R.id.speedLabel)
-        val speedBar = findViewById<SeekBar>(R.id.speedBar)
-        val speeds = Prefs.SPEEDS
-        speedBar.max = speeds.size - 1
-        val current = Prefs.speed(this)
-        speedBar.progress = speeds.indices.minByOrNull { kotlin.math.abs(speeds[it] - current) } ?: 3
-        speedLabel.text = "Speed: ${Prefs.speedLabel(speeds[speedBar.progress])}"
-        speedBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(bar: SeekBar, progress: Int, fromUser: Boolean) {
-                speedLabel.text = "Speed: ${Prefs.speedLabel(speeds[progress])}"
-            }
-            override fun onStartTrackingTouch(bar: SeekBar) {}
-            override fun onStopTrackingTouch(bar: SeekBar) {
-                // Saved when the finger lifts, so the wallpaper reloads once, not on every step.
-                Prefs.get(this@MainActivity).edit()
-                    .putFloat(Prefs.KEY_SPEED, speeds[bar.progress]).apply()
-                applyPreviewSpeed()
-            }
-        })
 
         findViewById<Button>(R.id.photosButton).setOnClickListener { pickFromGooglePhotos() }
         findViewById<Button>(R.id.pickButton).setOnClickListener { pickFile() }
@@ -237,42 +189,152 @@ class MainActivity : Activity() {
         }
     }
 
+
+    private fun buildSliders() {
+        addSlider("Zoom", Prefs.ZOOM_MIN, Prefs.ZOOM_MAX, 0.001f, 1f, log = true,
+            get = { Prefs.zoom(this) },
+            save = { putFloat(Prefs.KEY_ZOOM, it) },
+            label = { "Zoom: ${Fmt.num(it * 100, 1)}%" })
+        addSlider("Hue", -180f, 180f, 0.5f, 0f,
+            get = { Prefs.hue(this) },
+            save = { putFloat(Prefs.KEY_HUE, it) },
+            label = { Hue.label(it) })
+        addSlider("Brightness", Prefs.BRIGHT_MIN, Prefs.BRIGHT_MAX, 0.005f, 1f,
+            get = { Prefs.brightness(this) },
+            save = { putFloat(Prefs.KEY_BRIGHTNESS, it) },
+            label = { "Brightness: ${Fmt.num(it * 100, 1)}%" })
+        addSlider("Saturation", 0f, Prefs.SAT_MAX, 0.005f, 1f,
+            get = { Prefs.saturation(this) },
+            save = { putFloat(Prefs.KEY_SATURATION, it) },
+            label = {
+                if (it == 0f) "Saturation: 0% (black & white)" else "Saturation: ${Fmt.num(it * 100, 1)}%"
+            })
+        panXBar = addSlider("Pan", -Prefs.PAN_MAX, Prefs.PAN_MAX, PAN_STEP, 0f, resetText = "Center",
+            get = { Prefs.panX(this) },
+            save = { putFloat(Prefs.KEY_PAN_X, it) },
+            label = { panLabel("Pan left/right", it, "left", "right") })
+        panYBar = addSlider("Pan", -Prefs.PAN_MAX, Prefs.PAN_MAX, PAN_STEP, 0f, resetText = "Center",
+            get = { Prefs.panY(this) },
+            save = { putFloat(Prefs.KEY_PAN_Y, it) },
+            label = { panLabel("Pan up/down", it, "up", "down") })
+        // Speed is saved when you let go (changing it can restart the GIF decoder).
+        addSlider("Speed", Prefs.SPEED_MIN, Prefs.SPEED_MAX, 0.01f, 1f, log = true, live = false,
+            get = { Prefs.speed(this) },
+            save = { putFloat(Prefs.KEY_SPEED, it) },
+            label = { "Speed: ${Fmt.num(it)}×" + if (it == 1f) " (normal)" else "" },
+            onSaved = { applyPreviewSpeed() })
+    }
+
     private lateinit var panXBar: SeekBar
     private lateinit var panYBar: SeekBar
 
     /**
-     * Wires a label + slider (+ optional reset button) to a setting, in whole units from
-     * [min] to [max]. Saves on every change so the wallpaper updates live.
+     * Adds a row (label, −, +, reset) and a slider for one setting.
+     * [step] is the value change per slider tick (and per − / + tap). With [log], ticks are spread
+     * evenly on a log scale, so there's fine control near 100% as well as a wide range.
      */
-    private fun slider(
-        labelId: Int, barId: Int, resetId: Int?, min: Int, max: Int, default: Int,
-        get: () -> Int,
-        save: android.content.SharedPreferences.Editor.(Int) -> Unit,
-        label: (Int) -> String,
+    private fun addSlider(
+        @Suppress("UNUSED_PARAMETER") name: String,
+        min: Float, max: Float, step: Float, default: Float,
+        log: Boolean = false,
+        live: Boolean = true,
+        resetText: String = "Reset",
+        get: () -> Float,
+        save: android.content.SharedPreferences.Editor.(Float) -> Unit,
+        label: (Float) -> String,
+        onSaved: () -> Unit = {},
     ): SeekBar {
-        val text = findViewById<TextView>(labelId)
-        val bar = findViewById<SeekBar>(barId)
-        bar.max = max - min
-        bar.progress = get().coerceIn(min, max) - min
-        text.text = label(bar.progress + min)
+        val ticks = if (log) 1000 else Math.round((max - min) / step)
+        fun valueAt(p: Int): Float {
+            val raw = if (log) (min * Math.pow((max / min).toDouble(), p.toDouble() / ticks)).toFloat()
+            else min + p * step
+            val perUnit = Math.round(1f / step).toFloat() // e.g. step 0.005 -> 200
+            return (Math.round(raw * perUnit) / perUnit).coerceIn(min, max) // snap to the step size
+        }
+        fun progressOf(v: Float): Int =
+            if (log) Math.round(ticks * Math.log((v / min).toDouble()) / Math.log((max / min).toDouble())).toInt()
+            else Math.round((v - min) / step)
+
+        val container = findViewById<android.widget.LinearLayout>(R.id.sliders)
+        val row = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(0, dp(8), 0, 0)
+        }
+        val text = TextView(this)
+        row.addView(text, android.widget.LinearLayout.LayoutParams(0, -2, 1f))
+        fun smallButton(t: String) = Button(this, null, android.R.attr.buttonStyleSmall).apply {
+            this.text = t
+            minWidth = dp(44); minimumWidth = dp(44)
+            row.addView(this)
+        }
+        val minus = smallButton("−")
+        val plus = smallButton("+")
+        val reset = smallButton(resetText)
+        val bar = SeekBar(this)
+        container.addView(row)
+        container.addView(bar)
+
+        bar.max = ticks
+        bar.progress = progressOf(get()).coerceIn(0, ticks)
+        text.text = label(valueAt(bar.progress))
+
+        fun store(v: Float) {
+            Prefs.get(this).edit().apply { save(v) }.apply()
+            refreshPreviewLook()
+            onSaved()
+        }
         bar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(b: SeekBar, progress: Int, fromUser: Boolean) {
-                val v = progress + min
+                val v = valueAt(progress)
                 text.text = label(v)
-                Prefs.get(this@MainActivity).edit().apply { save(v) }.apply()
-                refreshPreviewLook()
+                // Buttons / reset / preview-drag change it in code (fromUser = false): save right away.
+                if (live || !fromUser) store(v)
             }
             override fun onStartTrackingTouch(b: SeekBar) {}
-            override fun onStopTrackingTouch(b: SeekBar) {}
+            override fun onStopTrackingTouch(b: SeekBar) {
+                if (!live) store(valueAt(b.progress))
+            }
         })
-        resetId?.let { findViewById<Button>(it).setOnClickListener { bar.progress = default - min } }
+        // − / + : one tick per tap; hold to repeat.
+        fun repeatOnHold(btn: Button, delta: Int) {
+            val handler = android.os.Handler(mainLooper)
+            val repeat = object : Runnable {
+                override fun run() {
+                    bar.progress = (bar.progress + delta).coerceIn(0, ticks)
+                    handler.postDelayed(this, 60)
+                }
+            }
+            btn.setOnTouchListener { v, e ->
+                when (e.actionMasked) {
+                    android.view.MotionEvent.ACTION_DOWN -> {
+                        bar.progress = (bar.progress + delta).coerceIn(0, ticks)
+                        handler.postDelayed(repeat, 400)
+                        v.isPressed = true
+                    }
+                    android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
+                        handler.removeCallbacks(repeat)
+                        v.isPressed = false
+                    }
+                }
+                true
+            }
+        }
+        repeatOnHold(minus, -1)
+        repeatOnHold(plus, +1)
+        reset.setOnClickListener { bar.progress = progressOf(default).coerceIn(0, ticks) }
         return bar
     }
 
-    private fun panLabel(name: String, v: Int, neg: String, pos: String) = when {
-        v == 0 -> "$name: center"
-        v < 0 -> "$name: ${-v}% $neg"
-        else -> "$name: $v% $pos"
+    private fun dp(v: Int) = Math.round(v * resources.displayMetrics.density)
+
+    private fun panLabel(name: String, v: Float, neg: String, pos: String): String {
+        val pct = Fmt.num(kotlin.math.abs(v) * 100, 2)
+        return when {
+            v == 0f -> "$name: center"
+            v < 0 -> "$name: $pct% $neg"
+            else -> "$name: $pct% $pos"
+        }
     }
 
     /** Dragging the preview pans the picture (moves the pan sliders). */
@@ -281,21 +343,23 @@ class MainActivity : Activity() {
         val frame = findViewById<View>(R.id.previewFrame)
         var lastX = 0f
         var lastY = 0f
+        var accX = 0f
+        var accY = 0f
         frame.setOnTouchListener { v, e ->
             when (e.actionMasked) {
                 android.view.MotionEvent.ACTION_DOWN -> {
-                    lastX = e.x; lastY = e.y
+                    lastX = e.x; lastY = e.y; accX = 0f; accY = 0f
                     v.parent.requestDisallowInterceptTouchEvent(true) // don't scroll the page
                 }
                 android.view.MotionEvent.ACTION_MOVE -> {
-                    val dx = (e.x - lastX) / v.width * 100
-                    val dy = (e.y - lastY) / v.height * 100
-                    if (kotlin.math.abs(dx) >= 1 || kotlin.math.abs(dy) >= 1) {
-                        panXBar.progress += dx.toInt()
-                        panYBar.progress += dy.toInt()
-                        if (kotlin.math.abs(dx) >= 1) lastX = e.x
-                        if (kotlin.math.abs(dy) >= 1) lastY = e.y
-                    }
+                    // Finger movement as a fraction of the preview, converted to slider ticks.
+                    accX += (e.x - lastX) / v.width / PAN_STEP
+                    accY += (e.y - lastY) / v.height / PAN_STEP
+                    lastX = e.x; lastY = e.y
+                    val tx = accX.toInt()
+                    val ty = accY.toInt()
+                    if (tx != 0) { panXBar.progress += tx; accX -= tx }
+                    if (ty != 0) { panYBar.progress += ty; accY -= ty }
                 }
             }
             true
@@ -349,6 +413,7 @@ class MainActivity : Activity() {
 
     companion object {
         private const val REQ_PICK = 1
+        private const val PAN_STEP = 0.0025f
         private const val GOOGLE_PHOTOS = "com.google.android.apps.photos"
     }
 }

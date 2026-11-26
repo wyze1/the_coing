@@ -13,10 +13,15 @@ object Prefs {
     const val KEY_ZOOM = "zoom"
     const val KEY_FLIP_H = "flip_h"
     const val KEY_FLIP_V = "flip_v"
-    const val KEY_HUE = "hue"
+    const val KEY_HUE = "hue_deg" // float; older versions stored whole degrees under "hue"
+    private const val KEY_HUE_OLD = "hue"
     const val KEY_BRIGHTNESS = "brightness"
-    const val BRIGHT_MIN = 0.2f
-    const val BRIGHT_MAX = 2f
+    const val BRIGHT_MIN = 0f
+    const val BRIGHT_MAX = 3f
+    const val SAT_MAX = 4f
+    const val PAN_MAX = 1f
+    const val SPEED_MIN = 0.1f
+    const val SPEED_MAX = 5f
     const val KEY_SATURATION = "saturation"
     const val KEY_PAN_X = "pan_x"
     const val KEY_PAN_Y = "pan_y"
@@ -26,11 +31,8 @@ object Prefs {
         KEY_SCALE, KEY_ZOOM, KEY_FLIP_H, KEY_FLIP_V, KEY_PAN_X, KEY_PAN_Y,
         KEY_HUE, KEY_BRIGHTNESS, KEY_SATURATION,
     )
-    const val ZOOM_MIN = 0.5f
-    const val ZOOM_MAX = 3f
-
-    /** Speed choices shown on the slider. */
-    val SPEEDS = floatArrayOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f)
+    const val ZOOM_MIN = 0.1f
+    const val ZOOM_MAX = 10f
     const val SCALE_FILL = "fill"
     const val SCALE_FIT = "fit"
     const val TYPE_IMAGE = "image"
@@ -54,16 +56,21 @@ object Prefs {
     fun flipV(context: Context) = get(context).getBoolean(KEY_FLIP_V, false)
 
     /** Hue shift in degrees, -180..180. */
-    fun hue(context: Context) = get(context).getInt(KEY_HUE, 0).coerceIn(-180, 180)
+    fun hue(context: Context): Float {
+        val p = get(context)
+        val v = if (p.contains(KEY_HUE)) p.getFloat(KEY_HUE, 0f)
+        else runCatching { p.getInt(KEY_HUE_OLD, 0).toFloat() }.getOrDefault(0f)
+        return v.coerceIn(-180f, 180f)
+    }
 
     fun brightness(context: Context) =
         get(context).getFloat(KEY_BRIGHTNESS, 1f).coerceIn(BRIGHT_MIN, BRIGHT_MAX)
 
-    fun saturation(context: Context) = get(context).getFloat(KEY_SATURATION, 1f).coerceIn(0f, 2f)
+    fun saturation(context: Context) = get(context).getFloat(KEY_SATURATION, 1f).coerceIn(0f, SAT_MAX)
 
-    /** Pan as a fraction of the screen size, -0.5..0.5 (0 = centered). */
-    fun panX(context: Context) = get(context).getFloat(KEY_PAN_X, 0f).coerceIn(-0.5f, 0.5f)
-    fun panY(context: Context) = get(context).getFloat(KEY_PAN_Y, 0f).coerceIn(-0.5f, 0.5f)
+    /** Pan as a fraction of the screen size, -1..1 (0 = centered). */
+    fun panX(context: Context) = get(context).getFloat(KEY_PAN_X, 0f).coerceIn(-PAN_MAX, PAN_MAX)
+    fun panY(context: Context) = get(context).getFloat(KEY_PAN_Y, 0f).coerceIn(-PAN_MAX, PAN_MAX)
 
     fun colorFilter(context: Context) = Hue.filter(hue(context), brightness(context), saturation(context))
     fun colorColumns(context: Context) = Hue.columns(hue(context), brightness(context), saturation(context))
@@ -71,10 +78,8 @@ object Prefs {
     fun zoom(context: Context): Float =
         get(context).getFloat(KEY_ZOOM, 1f).coerceIn(ZOOM_MIN, ZOOM_MAX)
 
-    fun speed(context: Context): Float = get(context).getFloat(KEY_SPEED, 1f)
-
-    fun speedLabel(speed: Float): String =
-        (if (speed % 1f == 0f) speed.toInt().toString() else speed.toString()) + "×"
+    fun speed(context: Context): Float =
+        get(context).getFloat(KEY_SPEED, 1f).coerceIn(SPEED_MIN, SPEED_MAX)
 
     /** Tell any running wallpaper engine to reload. */
     fun bumpVersion(context: Context) {
