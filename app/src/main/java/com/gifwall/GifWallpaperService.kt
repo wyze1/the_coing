@@ -74,18 +74,9 @@ class GifWallpaperService : WallpaperService() {
                 video?.setSpeed(speed)
                 return
             }
-            if (key == Prefs.KEY_HUE || key == Prefs.KEY_BRIGHTNESS) {
-                applyHue()
-                drawFrame()
-                return
-            }
-            if (key == Prefs.KEY_ZOOM || key == Prefs.KEY_SCALE ||
-                key == Prefs.KEY_FLIP_H || key == Prefs.KEY_FLIP_V
-            ) {
-                // Zoom / fit / flip change: just re-layout, so dragging the slider is smooth.
-                video?.setLayout(
-                    Prefs.scale(ctx) == Prefs.SCALE_FIT, Prefs.zoom(ctx), Prefs.flipH(ctx), Prefs.flipV(ctx),
-                )
+            if (key in Prefs.LIVE_KEYS) {
+                // Look changes (zoom, pan, flip, colors): apply in place so sliders feel instant.
+                applyLook()
                 updateBounds()
                 drawFrame()
                 return
@@ -150,7 +141,7 @@ class GifWallpaperService : WallpaperService() {
             }
 
             if (speed != 1f) {
-                moviePaint.colorFilter = Hue.filter(Prefs.hue(ctx), Prefs.brightness(ctx))
+                moviePaint.colorFilter = Prefs.colorFilter(ctx)
                 movie = runCatching { Movie.decodeFile(file.path) }.getOrNull()
                     ?.takeIf { it.duration() > 0 && it.width() > 0 }
                 if (movie != null) {
@@ -167,7 +158,7 @@ class GifWallpaperService : WallpaperService() {
                 ImageDecoder.decodeDrawable(ImageDecoder.createSource(file))
             }.getOrNull()?.also { d ->
                 d.callback = this
-                d.colorFilter = Hue.filter(Prefs.hue(ctx), Prefs.brightness(ctx))
+                d.colorFilter = Prefs.colorFilter(ctx)
                 (d as? AnimatedImageDrawable)?.let {
                     it.repeatCount = AnimatedImageDrawable.REPEAT_INFINITE
                     if (visible) it.start()
@@ -183,12 +174,11 @@ class GifWallpaperService : WallpaperService() {
             r.start(
                 if (surfaceW > 0) surfaceW else frame.width(),
                 if (surfaceH > 0) surfaceH else frame.height(),
-                Prefs.scale(ctx) == Prefs.SCALE_FIT, Prefs.zoom(ctx),
-                Prefs.flipH(ctx), Prefs.flipV(ctx), speed,
+                speed,
             )
-            r.setColor(Prefs.hue(ctx), Prefs.brightness(ctx))
-            if (visible) r.setVisible(true)
             video = r
+            applyLook()
+            if (visible) r.setVisible(true)
         }
 
         private fun releasePlayer() {
@@ -242,8 +232,9 @@ class GifWallpaperService : WallpaperService() {
             val canvas = try { holder.lockCanvas() } catch (e: Exception) { null } ?: return
             try {
                 canvas.drawColor(Color.BLACK)
-                // Flip around the center of the screen.
+                // Pan, then flip around the center of the screen.
                 canvas.save()
+                canvas.translate(Prefs.panX(ctx) * surfaceW, Prefs.panY(ctx) * surfaceH)
                 canvas.scale(
                     if (Prefs.flipH(ctx)) -1f else 1f, if (Prefs.flipV(ctx)) -1f else 1f,
                     surfaceW / 2f, surfaceH / 2f,
@@ -258,13 +249,16 @@ class GifWallpaperService : WallpaperService() {
 
         private val moviePaint = android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG)
 
-        private fun applyHue() {
-            val deg = Prefs.hue(ctx)
-            val bright = Prefs.brightness(ctx)
-            val f = Hue.filter(deg, bright)
+        /** Push the current colors and layout to whichever renderer is active. */
+        private fun applyLook() {
+            val f = Prefs.colorFilter(ctx)
             drawable?.colorFilter = f
             moviePaint.colorFilter = f
-            video?.setColor(deg, bright)
+            video?.setColor(Prefs.colorColumns(ctx))
+            video?.setLayout(
+                Prefs.scale(ctx) == Prefs.SCALE_FIT, Prefs.zoom(ctx),
+                Prefs.flipH(ctx), Prefs.flipV(ctx), Prefs.panX(ctx), Prefs.panY(ctx),
+            )
         }
 
         private fun drawMovie(canvas: Canvas, m: Movie) {

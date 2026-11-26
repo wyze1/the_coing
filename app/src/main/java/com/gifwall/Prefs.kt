@@ -17,6 +17,15 @@ object Prefs {
     const val KEY_BRIGHTNESS = "brightness"
     const val BRIGHT_MIN = 0.2f
     const val BRIGHT_MAX = 2f
+    const val KEY_SATURATION = "saturation"
+    const val KEY_PAN_X = "pan_x"
+    const val KEY_PAN_Y = "pan_y"
+
+    /** Keys that only change how the picture is drawn (applied live, no reload). */
+    val LIVE_KEYS = setOf(
+        KEY_SCALE, KEY_ZOOM, KEY_FLIP_H, KEY_FLIP_V, KEY_PAN_X, KEY_PAN_Y,
+        KEY_HUE, KEY_BRIGHTNESS, KEY_SATURATION,
+    )
     const val ZOOM_MIN = 0.5f
     const val ZOOM_MAX = 3f
 
@@ -49,6 +58,15 @@ object Prefs {
 
     fun brightness(context: Context) =
         get(context).getFloat(KEY_BRIGHTNESS, 1f).coerceIn(BRIGHT_MIN, BRIGHT_MAX)
+
+    fun saturation(context: Context) = get(context).getFloat(KEY_SATURATION, 1f).coerceIn(0f, 2f)
+
+    /** Pan as a fraction of the screen size, -0.5..0.5 (0 = centered). */
+    fun panX(context: Context) = get(context).getFloat(KEY_PAN_X, 0f).coerceIn(-0.5f, 0.5f)
+    fun panY(context: Context) = get(context).getFloat(KEY_PAN_Y, 0f).coerceIn(-0.5f, 0.5f)
+
+    fun colorFilter(context: Context) = Hue.filter(hue(context), brightness(context), saturation(context))
+    fun colorColumns(context: Context) = Hue.columns(hue(context), brightness(context), saturation(context))
 
     fun zoom(context: Context): Float =
         get(context).getFloat(KEY_ZOOM, 1f).coerceIn(ZOOM_MIN, ZOOM_MAX)

@@ -50,6 +50,8 @@ class VideoRenderer(private val output: Surface, private val file: File) {
     private var zoom = 1f
     private var flipH = false
     private var flipV = false
+    private var panX = 0f
+    private var panY = 0f
     private var hue = Hue.columns(0)
     private var speed = 1f
 
@@ -57,12 +59,10 @@ class VideoRenderer(private val output: Surface, private val file: File) {
     private val quad: FloatBuffer = ByteBuffer.allocateDirect(16 * 4)
         .order(ByteOrder.nativeOrder()).asFloatBuffer()
 
-    fun start(
-        width: Int, height: Int, fit: Boolean, zoom: Float, flipH: Boolean, flipV: Boolean, speed: Float,
-    ) = h.post {
+    /** Call [setLayout] and [setColor] right after this to apply the user's settings. */
+    fun start(width: Int, height: Int, speed: Float) = h.post {
         viewW = max(1, width); viewH = max(1, height)
-        this.fit = fit; this.zoom = zoom; this.speed = speed
-        this.flipH = flipH; this.flipV = flipV
+        this.speed = speed
         runCatching {
             initEgl()
             initGl()
@@ -75,14 +75,18 @@ class VideoRenderer(private val output: Surface, private val file: File) {
         draw(updateTexture = false)
     }
 
-    fun setColor(degrees: Int, brightness: Float) = h.post {
-        hue = Hue.columns(degrees, brightness)
+    /** Column-major 3x3 color matrix (hue, brightness, saturation). */
+    fun setColor(columns: FloatArray) = h.post {
+        hue = columns
         draw(updateTexture = false)
     }
 
-    fun setLayout(fit: Boolean, zoom: Float, flipH: Boolean, flipV: Boolean) = h.post {
+    fun setLayout(
+        fit: Boolean, zoom: Float, flipH: Boolean, flipV: Boolean, panX: Float, panY: Float,
+    ) = h.post {
         this.fit = fit; this.zoom = zoom
         this.flipH = flipH; this.flipV = flipV
+        this.panX = panX; this.panY = panY
         draw(updateTexture = false)
     }
 
@@ -167,13 +171,16 @@ class VideoRenderer(private val output: Surface, private val file: File) {
             // Half-size in GL units (screen = -1..1); a negative size mirrors the picture.
             val hw = videoW * s / viewW * (if (flipH) -1f else 1f)
             val hh = videoH * s / viewH * (if (flipV) -1f else 1f)
+            // Pan: fraction of the screen -> GL units (GL's y axis points up).
+            val ox = panX * 2f
+            val oy = -panY * 2f
             quad.clear()
             // x, y, u, v for a triangle strip
             quad.put(floatArrayOf(
-                -hw, -hh, 0f, 0f,
-                hw, -hh, 1f, 0f,
-                -hw, hh, 0f, 1f,
-                hw, hh, 1f, 1f,
+                ox - hw, oy - hh, 0f, 0f,
+                ox + hw, oy - hh, 1f, 0f,
+                ox - hw, oy + hh, 0f, 1f,
+                ox + hw, oy + hh, 1f, 1f,
             ))
             GLES20.glUseProgram(program)
             val aPos = GLES20.glGetAttribLocation(program, "aPos")

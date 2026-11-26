@@ -15,8 +15,9 @@ internal sealed class TrayApp : ApplicationContext
     private static readonly double[] Zooms = { 0.5, 0.75, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3 };
     private static readonly int[] Hues = { 0, 30, 60, 90, 120, 150, 180, -150, -120, -90, -60, -30 };
     private static readonly double[] Brights = { 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2 };
+    private static readonly double[] Sats = { 0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2 };
     private readonly ToolStripMenuItem _fitItem, _startupItem, _speedItem, _zoomItem, _flipHItem, _flipVItem, _hueItem,
-        _brightItem;
+        _brightItem, _satItem, _panItem;
     private readonly List<WallpaperForm> _forms = new();
     private readonly System.Windows.Forms.Timer _coverTimer = new() { Interval = 1500 };
     private readonly ExplorerWatcher _watcher;
@@ -95,6 +96,35 @@ internal sealed class TrayApp : ApplicationContext
         }
         UpdateBrightChecks();
         menu.Items.Add(_brightItem);
+
+        _satItem = new ToolStripMenuItem("Saturation");
+        _satItem.DropDownItems.Add("More vivid (+10%)", null, (_, _) => SetSaturation(_settings.Saturation + 0.1));
+        _satItem.DropDownItems.Add("Less vivid (−10%)", null, (_, _) => SetSaturation(_settings.Saturation - 0.1));
+        _satItem.DropDownItems.Add(new ToolStripSeparator());
+        foreach (double s in Sats)
+        {
+            string extra = s == 0 ? " (black & white)" : s == 1 ? " (normal)" : "";
+            var item = new ToolStripMenuItem(BrightLabel(s) + extra) { Tag = s };
+            item.Click += (_, _) => SetSaturation(s);
+            _satItem.DropDownItems.Add(item);
+        }
+        UpdateSatChecks();
+        menu.Items.Add(_satItem);
+
+        _panItem = new ToolStripMenuItem("Pan");
+        _panItem.DropDownItems.Add("Move left", null, (_, _) => MovePan(-0.05, 0));
+        _panItem.DropDownItems.Add("Move right", null, (_, _) => MovePan(0.05, 0));
+        _panItem.DropDownItems.Add("Move up", null, (_, _) => MovePan(0, -0.05));
+        _panItem.DropDownItems.Add("Move down", null, (_, _) => MovePan(0, 0.05));
+        _panItem.DropDownItems.Add(new ToolStripSeparator());
+        _panItem.DropDownItems.Add("Center", null, (_, _) => MovePan(-_settings.PanX, -_settings.PanY));
+        _panItem.DropDown.Closing += (_, e) =>
+        {
+            // Keep the menu open while nudging, so several moves don't need re-opening it.
+            if (e.CloseReason == ToolStripDropDownCloseReason.ItemClicked) e.Cancel = true;
+        };
+        UpdatePanText();
+        menu.Items.Add(_panItem);
         menu.Items.Add(_flipHItem);
         menu.Items.Add(_flipVItem);
         menu.Items.Add(_fitItem);
@@ -204,6 +234,36 @@ internal sealed class TrayApp : ApplicationContext
             if (item.Tag is double b) item.Checked = Math.Abs(b - _settings.Brightness) < 0.001;
         _brightItem.Text = $"Brightness ({BrightLabel(_settings.Brightness)})";
     }
+
+    private void SetSaturation(double s)
+    {
+        s = Math.Round(Math.Clamp(s, 0, 2.0), 2);
+        _settings.Saturation = s;
+        _settings.Save();
+        UpdateSatChecks();
+        foreach (var f in _forms) f.SetSaturation(s); // instant
+    }
+
+    private void UpdateSatChecks()
+    {
+        foreach (var item in _satItem.DropDownItems.OfType<ToolStripMenuItem>())
+            if (item.Tag is double s) item.Checked = Math.Abs(s - _settings.Saturation) < 0.001;
+        _satItem.Text = $"Saturation ({BrightLabel(_settings.Saturation)})";
+    }
+
+    private void MovePan(double dx, double dy)
+    {
+        _settings.PanX = Math.Round(Math.Clamp(_settings.PanX + dx, -0.5, 0.5), 2);
+        _settings.PanY = Math.Round(Math.Clamp(_settings.PanY + dy, -0.5, 0.5), 2);
+        _settings.Save();
+        UpdatePanText();
+        foreach (var f in _forms) f.SetPan(_settings.PanX, _settings.PanY); // instant
+    }
+
+    private void UpdatePanText() =>
+        _panItem.Text = _settings.PanX == 0 && _settings.PanY == 0
+            ? "Pan (centered)"
+            : $"Pan ({Math.Round(_settings.PanX * 100):+0;-0;0}%, {Math.Round(_settings.PanY * 100):+0;-0;0}%)";
 
     private static string HueLabel(int deg) => deg == 0 ? "Normal" : (deg > 0 ? "+" : "−") + Math.Abs(deg) + "°";
 
@@ -315,7 +375,7 @@ internal sealed class TrayApp : ApplicationContext
                 _forms.Add(form);
                 await form.LoadAsync(_env, pageFolder, mediaName, _settings.Fit, _settings.Speed, _settings.Zoom,
                     _settings.FlipH, _settings.FlipV, _settings.Hue,
-                    _settings.Brightness);
+                    _settings.Brightness, _settings.Saturation, _settings.PanX, _settings.PanY);
             }
         }
         finally
