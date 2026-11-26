@@ -66,13 +66,28 @@
         android:layout_height="wrap_content"
         android:orientation="vertical" />
 
-    <TextView
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
-        android:textSize="12sp"
-        android:alpha="0.7"
-        android:text="Tip: drag the preview with your finger to pan. Use − / + for fine steps." />
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textSize="12sp"
+            android:alpha="0.7"
+            android:text="Drag the preview to move the picture. Use − / + for fine steps." />
+
+        <Button
+            android:id="@+id/panCenter"
+            style="?android:attr/buttonStyleSmall"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Center" />
+    </LinearLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
