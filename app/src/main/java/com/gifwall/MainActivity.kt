@@ -84,18 +84,37 @@ class MainActivity : Activity() {
         hueBar.max = 360
         hueBar.progress = Prefs.hue(this) + 180
         hueLabel.text = Hue.label(Prefs.hue(this))
-        preview.colorFilter = Hue.filter(Prefs.hue(this))
+        preview.colorFilter = Hue.filter(Prefs.hue(this), Prefs.brightness(this))
         hueBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(bar: SeekBar, progress: Int, fromUser: Boolean) {
                 val deg = progress - 180
                 hueLabel.text = Hue.label(deg)
-                preview.colorFilter = Hue.filter(deg)
+                preview.colorFilter = Hue.filter(deg, Prefs.brightness(this@MainActivity))
                 Prefs.get(this@MainActivity).edit().putInt(Prefs.KEY_HUE, deg).apply()
             }
             override fun onStartTrackingTouch(bar: SeekBar) {}
             override fun onStopTrackingTouch(bar: SeekBar) {}
         })
         findViewById<Button>(R.id.hueReset).setOnClickListener { hueBar.progress = 180 }
+
+        // Brightness: 20%..200%, live while dragging.
+        val brightLabel = findViewById<TextView>(R.id.brightLabel)
+        val brightBar = findViewById<SeekBar>(R.id.brightBar)
+        val minB = Math.round(Prefs.BRIGHT_MIN * 100)
+        brightBar.max = Math.round(Prefs.BRIGHT_MAX * 100) - minB
+        brightBar.progress = Math.round(Prefs.brightness(this) * 100) - minB
+        brightLabel.text = Hue.brightnessLabel(Prefs.brightness(this))
+        brightBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(bar: SeekBar, progress: Int, fromUser: Boolean) {
+                val b = (progress + minB) / 100f
+                brightLabel.text = Hue.brightnessLabel(b)
+                preview.colorFilter = Hue.filter(Prefs.hue(this@MainActivity), b)
+                Prefs.get(this@MainActivity).edit().putFloat(Prefs.KEY_BRIGHTNESS, b).apply()
+            }
+            override fun onStartTrackingTouch(bar: SeekBar) {}
+            override fun onStopTrackingTouch(bar: SeekBar) {}
+        })
+        findViewById<Button>(R.id.brightReset).setOnClickListener { brightBar.progress = 100 - minB }
 
         val speedLabel = findViewById<TextView>(R.id.speedLabel)
         val speedBar = findViewById<SeekBar>(R.id.speedBar)

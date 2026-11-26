@@ -74,7 +74,7 @@ class GifWallpaperService : WallpaperService() {
                 video?.setSpeed(speed)
                 return
             }
-            if (key == Prefs.KEY_HUE) {
+            if (key == Prefs.KEY_HUE || key == Prefs.KEY_BRIGHTNESS) {
                 applyHue()
                 drawFrame()
                 return
@@ -150,7 +150,7 @@ class GifWallpaperService : WallpaperService() {
             }
 
             if (speed != 1f) {
-                moviePaint.colorFilter = Hue.filter(Prefs.hue(ctx))
+                moviePaint.colorFilter = Hue.filter(Prefs.hue(ctx), Prefs.brightness(ctx))
                 movie = runCatching { Movie.decodeFile(file.path) }.getOrNull()
                     ?.takeIf { it.duration() > 0 && it.width() > 0 }
                 if (movie != null) {
@@ -167,7 +167,7 @@ class GifWallpaperService : WallpaperService() {
                 ImageDecoder.decodeDrawable(ImageDecoder.createSource(file))
             }.getOrNull()?.also { d ->
                 d.callback = this
-                d.colorFilter = Hue.filter(Prefs.hue(ctx))
+                d.colorFilter = Hue.filter(Prefs.hue(ctx), Prefs.brightness(ctx))
                 (d as? AnimatedImageDrawable)?.let {
                     it.repeatCount = AnimatedImageDrawable.REPEAT_INFINITE
                     if (visible) it.start()
@@ -186,7 +186,7 @@ class GifWallpaperService : WallpaperService() {
                 Prefs.scale(ctx) == Prefs.SCALE_FIT, Prefs.zoom(ctx),
                 Prefs.flipH(ctx), Prefs.flipV(ctx), speed,
             )
-            r.setHue(Prefs.hue(ctx))
+            r.setColor(Prefs.hue(ctx), Prefs.brightness(ctx))
             if (visible) r.setVisible(true)
             video = r
         }
@@ -260,10 +260,11 @@ class GifWallpaperService : WallpaperService() {
 
         private fun applyHue() {
             val deg = Prefs.hue(ctx)
-            val f = Hue.filter(deg)
+            val bright = Prefs.brightness(ctx)
+            val f = Hue.filter(deg, bright)
             drawable?.colorFilter = f
             moviePaint.colorFilter = f
-            video?.setHue(deg)
+            video?.setColor(deg, bright)
         }
 
         private fun drawMovie(canvas: Canvas, m: Movie) {

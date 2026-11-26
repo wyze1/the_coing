@@ -14,7 +14,9 @@ internal sealed class TrayApp : ApplicationContext
     private static readonly double[] Speeds = { 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3 };
     private static readonly double[] Zooms = { 0.5, 0.75, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3 };
     private static readonly int[] Hues = { 0, 30, 60, 90, 120, 150, 180, -150, -120, -90, -60, -30 };
-    private readonly ToolStripMenuItem _fitItem, _startupItem, _speedItem, _zoomItem, _flipHItem, _flipVItem, _hueItem;
+    private static readonly double[] Brights = { 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2 };
+    private readonly ToolStripMenuItem _fitItem, _startupItem, _speedItem, _zoomItem, _flipHItem, _flipVItem, _hueItem,
+        _brightItem;
     private readonly List<WallpaperForm> _forms = new();
     private readonly System.Windows.Forms.Timer _coverTimer = new() { Interval = 1500 };
     private readonly ExplorerWatcher _watcher;
@@ -81,6 +83,18 @@ internal sealed class TrayApp : ApplicationContext
         }
         UpdateHueChecks();
         menu.Items.Add(_hueItem);
+        _brightItem = new ToolStripMenuItem("Brightness");
+        _brightItem.DropDownItems.Add("Brighter (+10%)", null, (_, _) => SetBrightness(_settings.Brightness + 0.1));
+        _brightItem.DropDownItems.Add("Darker (−10%)", null, (_, _) => SetBrightness(_settings.Brightness - 0.1));
+        _brightItem.DropDownItems.Add(new ToolStripSeparator());
+        foreach (double b in Brights)
+        {
+            var item = new ToolStripMenuItem(BrightLabel(b) + (b == 1 ? " (normal)" : "")) { Tag = b };
+            item.Click += (_, _) => SetBrightness(b);
+            _brightItem.DropDownItems.Add(item);
+        }
+        UpdateBrightChecks();
+        menu.Items.Add(_brightItem);
         menu.Items.Add(_flipHItem);
         menu.Items.Add(_flipVItem);
         menu.Items.Add(_fitItem);
@@ -171,6 +185,24 @@ internal sealed class TrayApp : ApplicationContext
         foreach (var item in _zoomItem.DropDownItems.OfType<ToolStripMenuItem>())
             if (item.Tag is double z) item.Checked = Math.Abs(z - _settings.Zoom) < 0.001;
         _zoomItem.Text = $"Zoom ({ZoomLabel(_settings.Zoom)})";
+    }
+
+    private static string BrightLabel(double b) => $"{Math.Round(b * 100)}%";
+
+    private void SetBrightness(double b)
+    {
+        b = Math.Round(Math.Clamp(b, 0.2, 2.0), 2);
+        _settings.Brightness = b;
+        _settings.Save();
+        UpdateBrightChecks();
+        foreach (var f in _forms) f.SetBrightness(b); // instant
+    }
+
+    private void UpdateBrightChecks()
+    {
+        foreach (var item in _brightItem.DropDownItems.OfType<ToolStripMenuItem>())
+            if (item.Tag is double b) item.Checked = Math.Abs(b - _settings.Brightness) < 0.001;
+        _brightItem.Text = $"Brightness ({BrightLabel(_settings.Brightness)})";
     }
 
     private static string HueLabel(int deg) => deg == 0 ? "Normal" : (deg > 0 ? "+" : "−") + Math.Abs(deg) + "°";
@@ -282,7 +314,8 @@ internal sealed class TrayApp : ApplicationContext
                 Desktop.Place(form.Handle, screen.Bounds);
                 _forms.Add(form);
                 await form.LoadAsync(_env, pageFolder, mediaName, _settings.Fit, _settings.Speed, _settings.Zoom,
-                    _settings.FlipH, _settings.FlipV, _settings.Hue);
+                    _settings.FlipH, _settings.FlipV, _settings.Hue,
+                    _settings.Brightness);
             }
         }
         finally

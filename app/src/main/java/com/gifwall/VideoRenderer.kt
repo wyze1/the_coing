@@ -75,8 +75,8 @@ class VideoRenderer(private val output: Surface, private val file: File) {
         draw(updateTexture = false)
     }
 
-    fun setHue(degrees: Int) = h.post {
-        hue = Hue.columns(degrees)
+    fun setColor(degrees: Int, brightness: Float) = h.post {
+        hue = Hue.columns(degrees, brightness)
         draw(updateTexture = false)
     }
 

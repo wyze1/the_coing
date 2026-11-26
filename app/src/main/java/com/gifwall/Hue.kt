@@ -5,10 +5,16 @@ import android.graphics.ColorMatrixColorFilter
 import kotlin.math.cos
 import kotlin.math.sin
 
-/** Hue rotation using the same math as CSS `hue-rotate()`, so phone and PC match. */
+/**
+ * Hue rotation + brightness, using the same math as CSS `hue-rotate()` and `brightness()`,
+ * so phone and PC match. Brightness is a simple multiplier (1 = unchanged).
+ */
 object Hue {
     /** 3x3 matrix, row-major: out.rgb = M * in.rgb */
-    fun rows(degrees: Int): FloatArray {
+    fun rows(degrees: Int, brightness: Float = 1f): FloatArray =
+        hueRows(degrees).map { it * brightness }.toFloatArray()
+
+    private fun hueRows(degrees: Int): FloatArray {
         val a = Math.toRadians(degrees.toDouble())
         val c = cos(a).toFloat()
         val s = sin(a).toFloat()
@@ -20,15 +26,15 @@ object Hue {
     }
 
     /** Column-major copy for OpenGL. */
-    fun columns(degrees: Int): FloatArray {
-        val r = rows(degrees)
+    fun columns(degrees: Int, brightness: Float = 1f): FloatArray {
+        val r = rows(degrees, brightness)
         return FloatArray(9) { i -> r[(i % 3) * 3 + i / 3] }
     }
 
     /** Color filter for Canvas / drawables, or null when there is no shift. */
-    fun filter(degrees: Int): ColorMatrixColorFilter? {
-        if (degrees == 0) return null
-        val r = rows(degrees)
+    fun filter(degrees: Int, brightness: Float = 1f): ColorMatrixColorFilter? {
+        if (degrees == 0 && brightness == 1f) return null
+        val r = rows(degrees, brightness)
         return ColorMatrixColorFilter(ColorMatrix(floatArrayOf(
             r[0], r[1], r[2], 0f, 0f,
             r[3], r[4], r[5], 0f, 0f,
@@ -36,6 +42,8 @@ object Hue {
             0f, 0f, 0f, 1f, 0f,
         )))
     }
+
+    fun brightnessLabel(b: Float) = "Brightness: ${Math.round(b * 100)}%"
 
     fun label(degrees: Int) = if (degrees == 0) "Hue: normal" else "Hue: ${if (degrees > 0) "+" else ""}$degrees°"
 }

@@ -14,6 +14,9 @@ object Prefs {
     const val KEY_FLIP_H = "flip_h"
     const val KEY_FLIP_V = "flip_v"
     const val KEY_HUE = "hue"
+    const val KEY_BRIGHTNESS = "brightness"
+    const val BRIGHT_MIN = 0.2f
+    const val BRIGHT_MAX = 2f
     const val ZOOM_MIN = 0.5f
     const val ZOOM_MAX = 3f
 
@@ -43,6 +46,9 @@ object Prefs {
 
     /** Hue shift in degrees, -180..180. */
     fun hue(context: Context) = get(context).getInt(KEY_HUE, 0).coerceIn(-180, 180)
+
+    fun brightness(context: Context) =
+        get(context).getFloat(KEY_BRIGHTNESS, 1f).coerceIn(BRIGHT_MIN, BRIGHT_MAX)
 
     fun zoom(context: Context): Float =
         get(context).getFloat(KEY_ZOOM, 1f).coerceIn(ZOOM_MIN, ZOOM_MAX)

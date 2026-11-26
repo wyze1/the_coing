@@ -11,6 +11,7 @@ internal sealed class Settings
     public bool FlipH { get; set; }
     public bool FlipV { get; set; }
     public int Hue { get; set; }
+    public double Brightness { get; set; } = 1.0;
 
     public static string Folder =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GifWallpaper");
