@@ -20,8 +20,20 @@ internal sealed class TrayApp : ApplicationContext
     private CoreWebView2Environment? _env;
     private bool _rebuilding, _pending;
 
-    public TrayApp()
+    private readonly Control _ui = new();
+    private RegisteredWaitHandle? _quitWait;
+
+    public TrayApp(EventWaitHandle quitSignal)
     {
+        // A newer copy that starts up signals this event: exit so it can take over.
+        _ui.CreateControl();
+        _quitWait = ThreadPool.RegisterWaitForSingleObject(quitSignal,
+            (_, _) => _ui.BeginInvoke(new Action(ExitApp)), null, Timeout.Infinite, executeOnlyOnce: true);
+
+        // If "Start with Windows" points at another copy of the app (e.g. an older download),
+        // point it at this one.
+        if (IsStartupEnabled()) SetStartupPath();
+
         _fitItem = new ToolStripMenuItem("Fit (no crop)", null, (_, _) => ToggleFit())
             { Checked = _settings.Fit };
         _startupItem = new ToolStripMenuItem("Start with Windows", null, (_, _) => ToggleStartup())
@@ -160,8 +172,15 @@ internal sealed class TrayApp : ApplicationContext
     {
         using var key = Registry.CurrentUser.CreateSubKey(RunKey);
         if (IsStartupEnabled()) key.DeleteValue(RunName, false);
-        else key.SetValue(RunName, $"\"{Environment.ProcessPath}\"");
+        else SetStartupPath();
         _startupItem.Checked = IsStartupEnabled();
+    }
+
+    private static void SetStartupPath()
+    {
+        using var key = Registry.CurrentUser.CreateSubKey(RunKey);
+        string want = $"\"{Environment.ProcessPath}\"";
+        if (key.GetValue(RunName) as string != want) key.SetValue(RunName, want);
     }
 
     private async Task RebuildAsync()
@@ -281,6 +300,7 @@ internal sealed class TrayApp : ApplicationContext
         _tray.Visible = false;
         _tray.Dispose();
         _watcher.DestroyHandle();
+        _quitWait?.Unregister(null);
         ExitThread();
     }
 
