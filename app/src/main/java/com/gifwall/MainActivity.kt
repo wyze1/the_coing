@@ -78,6 +78,25 @@ class MainActivity : Activity() {
         })
         findViewById<Button>(R.id.zoomReset).setOnClickListener { zoomBar.progress = 100 - minPct }
 
+        // Hue: -180°..+180°, updates the wallpaper live while dragging.
+        val hueLabel = findViewById<TextView>(R.id.hueLabel)
+        val hueBar = findViewById<SeekBar>(R.id.hueBar)
+        hueBar.max = 360
+        hueBar.progress = Prefs.hue(this) + 180
+        hueLabel.text = Hue.label(Prefs.hue(this))
+        preview.colorFilter = Hue.filter(Prefs.hue(this))
+        hueBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(bar: SeekBar, progress: Int, fromUser: Boolean) {
+                val deg = progress - 180
+                hueLabel.text = Hue.label(deg)
+                preview.colorFilter = Hue.filter(deg)
+                Prefs.get(this@MainActivity).edit().putInt(Prefs.KEY_HUE, deg).apply()
+            }
+            override fun onStartTrackingTouch(bar: SeekBar) {}
+            override fun onStopTrackingTouch(bar: SeekBar) {}
+        })
+        findViewById<Button>(R.id.hueReset).setOnClickListener { hueBar.progress = 180 }
+
         val speedLabel = findViewById<TextView>(R.id.speedLabel)
         val speedBar = findViewById<SeekBar>(R.id.speedBar)
         val speeds = Prefs.SPEEDS

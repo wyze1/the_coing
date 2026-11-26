@@ -37,7 +37,7 @@ internal sealed class WallpaperForm : Form
     protected override bool ShowWithoutActivation => true;
 
     /// <param name="mediaName">File name of the media copy inside <paramref name="pageFolder"/>.</param>
-    public async Task LoadAsync(CoreWebView2Environment env, string pageFolder, string mediaName, bool fit, double speed, double zoom, bool flipH, bool flipV)
+    public async Task LoadAsync(CoreWebView2Environment env, string pageFolder, string mediaName, bool fit, double speed, double zoom, bool flipH, bool flipV, int hue)
     {
         await _web.EnsureCoreWebView2Async(env);
         var core = _web.CoreWebView2;
@@ -52,11 +52,14 @@ internal sealed class WallpaperForm : Form
                      && !mediaName.EndsWith(".webp", StringComparison.OrdinalIgnoreCase);
         core.Navigate($"https://{Host}/index.html#src={Uri.EscapeDataString(src)}" +
                       $"&fit={(fit ? 1 : 0)}&video={(video ? 1 : 0)}&speed={Num(speed)}&zoom={Num(zoom)}" +
-                      $"&fh={(flipH ? 1 : 0)}&fv={(flipV ? 1 : 0)}");
+                      $"&fh={(flipH ? 1 : 0)}&fv={(flipV ? 1 : 0)}&hue={hue}");
     }
 
     public void SetFlip(bool h, bool v) =>
         _ = _web.CoreWebView2?.ExecuteScriptAsync($"setFlip({(h ? "true" : "false")},{(v ? "true" : "false")})");
+
+    public void SetHue(int degrees) =>
+        _ = _web.CoreWebView2?.ExecuteScriptAsync($"setHue({degrees})");
 
     public void SetZoom(double zoom) =>
         _ = _web.CoreWebView2?.ExecuteScriptAsync($"setZoom({Num(zoom)})");
@@ -78,7 +81,7 @@ internal sealed class WallpaperForm : Form
 <html><head><meta charset="utf-8">
 <style>
   html,body{margin:0;height:100%;background:#000;overflow:hidden}
-  #m{width:100vw;height:100vh;display:block;object-fit:cover;transform-origin:center;transform:scale(calc(var(--zoom,1) * var(--fx,1)), calc(var(--zoom,1) * var(--fy,1)))}
+  #m{width:100vw;height:100vh;display:block;object-fit:cover;transform-origin:center;transform:scale(calc(var(--zoom,1) * var(--fx,1)), calc(var(--zoom,1) * var(--fy,1)));filter:hue-rotate(var(--hue,0deg))}
   body.fit #m{object-fit:contain}
 </style></head>
 <body>
@@ -98,6 +101,8 @@ internal sealed class WallpaperForm : Form
     s.setProperty('--fy', v ? -1 : 1);
   }
   setFlip(p.get('fh') === '1', p.get('fv') === '1');
+  function setHue(deg) { document.documentElement.style.setProperty('--hue', deg + 'deg'); }
+  setHue(parseInt(p.get('hue') || '0') || 0);
   function setSpeed(s) { speed = s; if (el && el.tagName === 'VIDEO') el.playbackRate = s; }
   function pauseMedia() { paused = true; if (el && el.tagName === 'VIDEO') el.pause(); }
   function playMedia() {

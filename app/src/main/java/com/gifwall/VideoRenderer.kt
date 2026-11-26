@@ -50,6 +50,7 @@ class VideoRenderer(private val output: Surface, private val file: File) {
     private var zoom = 1f
     private var flipH = false
     private var flipV = false
+    private var hue = Hue.columns(0)
     private var speed = 1f
 
     private val texMatrix = FloatArray(16)
@@ -71,6 +72,11 @@ class VideoRenderer(private val output: Surface, private val file: File) {
 
     fun setSize(width: Int, height: Int) = h.post {
         viewW = max(1, width); viewH = max(1, height)
+        draw(updateTexture = false)
+    }
+
+    fun setHue(degrees: Int) = h.post {
+        hue = Hue.columns(degrees)
         draw(updateTexture = false)
     }
 
@@ -179,6 +185,7 @@ class VideoRenderer(private val output: Surface, private val file: File) {
             GLES20.glVertexAttribPointer(aTex, 2, GLES20.GL_FLOAT, false, 16, quad)
             GLES20.glEnableVertexAttribArray(aTex)
             GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(program, "uTex"), 1, false, texMatrix, 0)
+            GLES20.glUniformMatrix3fv(GLES20.glGetUniformLocation(program, "uHue"), 1, false, hue, 0)
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
             GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, texId)
             GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
@@ -236,7 +243,11 @@ class VideoRenderer(private val output: Surface, private val file: File) {
             precision mediump float;
             uniform samplerExternalOES sTex;
             varying vec2 vTex;
-            void main() { gl_FragColor = texture2D(sTex, vTex); }
+            uniform mat3 uHue;
+            void main() {
+                vec4 c = texture2D(sTex, vTex);
+                gl_FragColor = vec4(clamp(uHue * c.rgb, 0.0, 1.0), c.a);
+            }
         """
         program = GLES20.glCreateProgram()
         GLES20.glAttachShader(program, compile(GLES20.GL_VERTEX_SHADER, vs))

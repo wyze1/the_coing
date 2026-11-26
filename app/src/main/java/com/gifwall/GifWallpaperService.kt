@@ -74,6 +74,11 @@ class GifWallpaperService : WallpaperService() {
                 video?.setSpeed(speed)
                 return
             }
+            if (key == Prefs.KEY_HUE) {
+                applyHue()
+                drawFrame()
+                return
+            }
             if (key == Prefs.KEY_ZOOM || key == Prefs.KEY_SCALE ||
                 key == Prefs.KEY_FLIP_H || key == Prefs.KEY_FLIP_V
             ) {
@@ -145,6 +150,7 @@ class GifWallpaperService : WallpaperService() {
             }
 
             if (speed != 1f) {
+                moviePaint.colorFilter = Hue.filter(Prefs.hue(ctx))
                 movie = runCatching { Movie.decodeFile(file.path) }.getOrNull()
                     ?.takeIf { it.duration() > 0 && it.width() > 0 }
                 if (movie != null) {
@@ -161,6 +167,7 @@ class GifWallpaperService : WallpaperService() {
                 ImageDecoder.decodeDrawable(ImageDecoder.createSource(file))
             }.getOrNull()?.also { d ->
                 d.callback = this
+                d.colorFilter = Hue.filter(Prefs.hue(ctx))
                 (d as? AnimatedImageDrawable)?.let {
                     it.repeatCount = AnimatedImageDrawable.REPEAT_INFINITE
                     if (visible) it.start()
@@ -179,6 +186,7 @@ class GifWallpaperService : WallpaperService() {
                 Prefs.scale(ctx) == Prefs.SCALE_FIT, Prefs.zoom(ctx),
                 Prefs.flipH(ctx), Prefs.flipV(ctx), speed,
             )
+            r.setHue(Prefs.hue(ctx))
             if (visible) r.setVisible(true)
             video = r
         }
@@ -248,6 +256,16 @@ class GifWallpaperService : WallpaperService() {
             }
         }
 
+        private val moviePaint = android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG)
+
+        private fun applyHue() {
+            val deg = Prefs.hue(ctx)
+            val f = Hue.filter(deg)
+            drawable?.colorFilter = f
+            moviePaint.colorFilter = f
+            video?.setHue(deg)
+        }
+
         private fun drawMovie(canvas: Canvas, m: Movie) {
             val now = SystemClock.uptimeMillis()
             movieTime = (movieTime + (now - lastTick) * speed) % m.duration()
@@ -256,7 +274,7 @@ class GifWallpaperService : WallpaperService() {
             canvas.save()
             canvas.translate(movieLeft, movieTop)
             canvas.scale(movieScale, movieScale)
-            m.draw(canvas, 0f, 0f)
+            m.draw(canvas, 0f, 0f, moviePaint)
             canvas.restore()
         }
 

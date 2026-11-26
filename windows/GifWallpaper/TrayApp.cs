@@ -13,7 +13,8 @@ internal sealed class TrayApp : ApplicationContext
     private readonly NotifyIcon _tray;
     private static readonly double[] Speeds = { 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3 };
     private static readonly double[] Zooms = { 0.5, 0.75, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3 };
-    private readonly ToolStripMenuItem _fitItem, _startupItem, _speedItem, _zoomItem, _flipHItem, _flipVItem;
+    private static readonly int[] Hues = { 0, 30, 60, 90, 120, 150, 180, -150, -120, -90, -60, -30 };
+    private readonly ToolStripMenuItem _fitItem, _startupItem, _speedItem, _zoomItem, _flipHItem, _flipVItem, _hueItem;
     private readonly List<WallpaperForm> _forms = new();
     private readonly System.Windows.Forms.Timer _coverTimer = new() { Interval = 1500 };
     private readonly ExplorerWatcher _watcher;
@@ -68,6 +69,18 @@ internal sealed class TrayApp : ApplicationContext
             { Checked = _settings.FlipH };
         _flipVItem = new ToolStripMenuItem("Flip vertically", null, (_, _) => ToggleFlip(h: false))
             { Checked = _settings.FlipV };
+        _hueItem = new ToolStripMenuItem("Hue");
+        _hueItem.DropDownItems.Add("Shift +15°", null, (_, _) => SetHue(_settings.Hue + 15));
+        _hueItem.DropDownItems.Add("Shift −15°", null, (_, _) => SetHue(_settings.Hue - 15));
+        _hueItem.DropDownItems.Add(new ToolStripSeparator());
+        foreach (int deg in Hues)
+        {
+            var item = new ToolStripMenuItem(HueLabel(deg)) { Tag = deg };
+            item.Click += (_, _) => SetHue(deg);
+            _hueItem.DropDownItems.Add(item);
+        }
+        UpdateHueChecks();
+        menu.Items.Add(_hueItem);
         menu.Items.Add(_flipHItem);
         menu.Items.Add(_flipVItem);
         menu.Items.Add(_fitItem);
@@ -160,6 +173,25 @@ internal sealed class TrayApp : ApplicationContext
         _zoomItem.Text = $"Zoom ({ZoomLabel(_settings.Zoom)})";
     }
 
+    private static string HueLabel(int deg) => deg == 0 ? "Normal" : (deg > 0 ? "+" : "−") + Math.Abs(deg) + "°";
+
+    private void SetHue(int deg)
+    {
+        // Keep within -180..180 so it wraps around the color wheel.
+        deg = ((deg + 180) % 360 + 360) % 360 - 180;
+        _settings.Hue = deg;
+        _settings.Save();
+        UpdateHueChecks();
+        foreach (var f in _forms) f.SetHue(deg); // instant
+    }
+
+    private void UpdateHueChecks()
+    {
+        foreach (var item in _hueItem.DropDownItems.OfType<ToolStripMenuItem>())
+            if (item.Tag is int d) item.Checked = d == _settings.Hue || (Math.Abs(d) == 180 && Math.Abs(_settings.Hue) == 180);
+        _hueItem.Text = $"Hue ({HueLabel(_settings.Hue)})";
+    }
+
     private void ToggleFlip(bool h)
     {
         if (h) _settings.FlipH = !_settings.FlipH; else _settings.FlipV = !_settings.FlipV;
@@ -250,7 +282,7 @@ internal sealed class TrayApp : ApplicationContext
                 Desktop.Place(form.Handle, screen.Bounds);
                 _forms.Add(form);
                 await form.LoadAsync(_env, pageFolder, mediaName, _settings.Fit, _settings.Speed, _settings.Zoom,
-                    _settings.FlipH, _settings.FlipV);
+                    _settings.FlipH, _settings.FlipV, _settings.Hue);
             }
         }
         finally
