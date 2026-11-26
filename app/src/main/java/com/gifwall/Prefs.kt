@@ -29,6 +29,11 @@ object Prefs {
     const val KEY_BREATHE_DEPTH = "breathe_depth"
     const val KEY_BREATHE_PERIOD = "breathe_period"
     const val KEY_BREATHE_MODE = "breathe_mode"
+    const val KEY_SWIRL = "swirl"
+    const val KEY_SWIRL_DEPTH = "swirl_depth"
+    const val KEY_SWIRL_SIZE = "swirl_size"
+    const val KEY_SWIRL_CENTER = "swirl_center"
+    const val KEY_SWIRL_PERIOD = "swirl_period"
     fun keyPointX(i: Int) = "point${i + 1}_x"
     fun keyPointY(i: Int) = "point${i + 1}_y"
 
@@ -37,6 +42,7 @@ object Prefs {
         KEY_SCALE, KEY_ZOOM, KEY_FLIP_H, KEY_FLIP_V, KEY_PAN_X, KEY_PAN_Y,
         KEY_HUE, KEY_BRIGHTNESS, KEY_SATURATION,
         KEY_BREATHE, KEY_BREATHE_DEPTH, KEY_BREATHE_PERIOD, KEY_BREATHE_MODE,
+        KEY_SWIRL, KEY_SWIRL_DEPTH, KEY_SWIRL_SIZE, KEY_SWIRL_CENTER, KEY_SWIRL_PERIOD,
     ) + (0 until 4).flatMap { listOf(keyPointX(it), keyPointY(it)) }
     const val ZOOM_MIN = 0.1f
     const val ZOOM_MAX = 10f

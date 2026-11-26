@@ -43,6 +43,7 @@ class MainActivity : Activity() {
 
         buildSliders()
         setupBreathing()
+        setupSwirl()
         setupPreviewDrag()
 
         listOf(R.id.flipH to Prefs.KEY_FLIP_H, R.id.flipV to Prefs.KEY_FLIP_V).forEach { (id, key) ->
@@ -371,6 +372,74 @@ class MainActivity : Activity() {
         }
         preview.colorFilter = Prefs.colorFilter(this)
         if (::focalOverlay.isInitialized) focalOverlay.invalidate()
+        applyPreviewSwirl()
+    }
+
+    // ---------- Swirl ----------
+
+    private fun setupSwirl() {
+        val sw = findViewById<Switch>(R.id.swirlSwitch)
+        sw.isChecked = Prefs.get(this).getBoolean(Prefs.KEY_SWIRL, false)
+        sw.setOnCheckedChangeListener { _, on ->
+            Prefs.get(this).edit().putBoolean(Prefs.KEY_SWIRL, on).apply()
+            refreshPreviewLook()
+        }
+        addSlider("Depth", -3f, 3f, 0.01f, 1f, containerId = R.id.swirlSliders,
+            get = { Prefs.get(this).getFloat(Prefs.KEY_SWIRL_DEPTH, 1f) },
+            save = { putFloat(Prefs.KEY_SWIRL_DEPTH, it) },
+            label = {
+                when {
+                    it == 0f -> "Swirl depth: none"
+                    it > 0f -> "Swirl depth: ${Fmt.num(it)} turns ⟲"
+                    else -> "Swirl depth: ${Fmt.num(-it)} turns ⟳"
+                }
+            })
+        addSlider("Size", 0.1f, 2f, 0.01f, 1f, containerId = R.id.swirlSliders,
+            get = { Prefs.get(this).getFloat(Prefs.KEY_SWIRL_SIZE, 1f) },
+            save = { putFloat(Prefs.KEY_SWIRL_SIZE, it) },
+            label = { "Swirl size: ${Fmt.num(it * 100, 0)}%" })
+        addSlider("Motion", 0f, 30f, 0.1f, 0f, containerId = R.id.swirlSliders,
+            get = { Prefs.get(this).getFloat(Prefs.KEY_SWIRL_PERIOD, 0f) },
+            save = { putFloat(Prefs.KEY_SWIRL_PERIOD, it) },
+            label = { if (it == 0f) "Swirl motion: still" else "Swirl motion: twists back and forth every ${Fmt.num(it, 1)} s" })
+
+        val spinner = findViewById<android.widget.Spinner>(R.id.swirlCenter)
+        spinner.adapter = android.widget.ArrayAdapter(
+            this, android.R.layout.simple_spinner_dropdown_item, Swirl.CENTER_NAMES,
+        )
+        spinner.setSelection(Prefs.get(this).getInt(Prefs.KEY_SWIRL_CENTER, 0))
+        spinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(p: android.widget.AdapterView<*>?, v: View?, pos: Int, id: Long) {
+                Prefs.get(this@MainActivity).edit().putInt(Prefs.KEY_SWIRL_CENTER, pos).apply()
+                refreshPreviewLook()
+            }
+            override fun onNothingSelected(p: android.widget.AdapterView<*>?) {}
+        }
+        if (android.os.Build.VERSION.SDK_INT < 33) {
+            findViewById<TextView>(R.id.swirlNote).append(" The swirl shows on the wallpaper, not in this preview.")
+        }
+    }
+
+    /** Shows the swirl on the GIF preview (Android 13+; video previews can't be warped). */
+    private fun applyPreviewSwirl() {
+        if (android.os.Build.VERSION.SDK_INT < 33) return
+        val d = preview.drawable
+        val st = Swirl.at(Swirl.config(this), 0L)?.let {
+            // preview shows the swirl at full depth (no motion)
+            it.copy(angle = (Prefs.get(this).getFloat(Prefs.KEY_SWIRL_DEPTH, 1f) * 2 * Math.PI).toFloat())
+        }
+        if (st == null || d == null || d.intrinsicWidth <= 0 || preview.visibility != View.VISIBLE) {
+            preview.setRenderEffect(null)
+            return
+        }
+        val r = android.graphics.RectF(0f, 0f, d.intrinsicWidth.toFloat(), d.intrinsicHeight.toFloat())
+        preview.imageMatrix.mapRect(r)
+        val aspect = d.intrinsicWidth.toFloat() / d.intrinsicHeight
+        val shader = android.graphics.RuntimeShader(PREVIEW_SWIRL_AGSL)
+        shader.setFloatUniform("rect", r.left, r.top, r.width(), r.height())
+        shader.setFloatUniform("sw", st.cx, st.cy, st.size * kotlin.math.min(aspect, 1f) * 0.5f, st.angle)
+        shader.setFloatUniform("aspect", aspect)
+        preview.setRenderEffect(android.graphics.RenderEffect.createRuntimeShaderEffect(shader, "content"))
     }
 
     // ---------- Breathing ----------
@@ -447,6 +516,7 @@ class MainActivity : Activity() {
             .apply()
         focalOverlay.placingIndex = -1
         refreshBreathUi()
+        refreshPreviewLook() // the swirl may be centered on this point
     }
 
     /** The preview view currently showing the picture, and the size of the picture inside it. */
@@ -517,6 +587,28 @@ class MainActivity : Activity() {
 
     companion object {
         private const val REQ_PICK = 1
+
+        /** Same swirl as the wallpaper (inverse warp), in the preview view's pixel space. */
+        private const val PREVIEW_SWIRL_AGSL = """
+            uniform shader content;
+            uniform float4 rect;   // picture rect inside the view: left, top, width, height
+            uniform float4 sw;     // cx, cy, radius, angle
+            uniform float aspect;
+            half4 main(float2 p) {
+                float2 img = (p - rect.xy) / rect.zw;
+                float2 d = (img - sw.xy) * float2(aspect, 1.0);
+                float r = length(d);
+                if (sw.z > 0.0 && r < sw.z) {
+                    float t = 1.0 - r / sw.z;
+                    float a = -sw.w * t * t;
+                    float c = cos(a);
+                    float s = sin(a);
+                    d = float2(d.x * c - d.y * s, d.x * s + d.y * c);
+                    img = sw.xy + d / float2(aspect, 1.0);
+                }
+                return content.eval(rect.xy + img * rect.zw);
+            }
+        """
         private const val GOOGLE_PHOTOS = "com.google.android.apps.photos"
     }
 }

@@ -58,7 +58,7 @@ class VideoRenderer(private val output: Surface, private val file: File) {
     // While breathing, redraw ~60 times a second so the zoom stays smooth between video frames.
     private val breathTick = object : Runnable {
         override fun run() {
-            if (!visible || breath?.on != true) return
+            if (!visible || !needsTick()) return
             draw(updateTexture = false)
             h.postDelayed(this, 16)
         }
@@ -66,7 +66,16 @@ class VideoRenderer(private val output: Surface, private val file: File) {
 
     private fun startBreathTick() {
         h.removeCallbacks(breathTick)
-        if (visible && breath?.on == true) h.post(breathTick)
+        if (visible && needsTick()) h.post(breathTick)
+    }
+
+    private var swirl: Swirl.Config? = null
+    private fun needsTick() = breath?.on == true || swirl?.animated == true
+
+    fun setSwirl(cfg: Swirl.Config) = h.post {
+        swirl = cfg
+        startBreathTick()
+        draw(updateTexture = false)
     }
 
     fun setBreath(cfg: Breath.Config) = h.post {
@@ -228,6 +237,15 @@ class VideoRenderer(private val output: Surface, private val file: File) {
             GLES20.glEnableVertexAttribArray(aTex)
             GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(program, "uTex"), 1, false, texMatrix, 0)
             GLES20.glUniformMatrix3fv(GLES20.glGetUniformLocation(program, "uHue"), 1, false, hue, 0)
+            // Swirl: center, radius (in aspect-corrected image units) and twist angle.
+            val sw = swirl?.let { Swirl.at(it, android.os.SystemClock.uptimeMillis()) }
+            val aspect = videoW.toFloat() / videoH
+            GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "uAspect"), aspect)
+            GLES20.glUniform4f(
+                GLES20.glGetUniformLocation(program, "uSwirl"),
+                sw?.cx ?: 0.5f, sw?.cy ?: 0.5f,
+                (sw?.size ?: 0f) * min(aspect, 1f) * 0.5f, sw?.angle ?: 0f,
+            )
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
             GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, texId)
             GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
@@ -273,22 +291,40 @@ class VideoRenderer(private val output: Surface, private val file: File) {
         val vs = """
             attribute vec2 aPos;
             attribute vec4 aTex;
-            uniform mat4 uTex;
-            varying vec2 vTex;
+            varying vec2 vLocal;
             void main() {
                 gl_Position = vec4(aPos, 0.0, 1.0);
-                vTex = (uTex * aTex).xy;
+                vLocal = aTex.xy; // 0..1 across the picture, v pointing up
             }
         """
         val fs = """
             #extension GL_OES_EGL_image_external : require
-            precision mediump float;
+            precision highp float;
             uniform samplerExternalOES sTex;
-            varying vec2 vTex;
+            uniform mat4 uTex;
             uniform mat3 uHue;
+            uniform vec4 uSwirl;   // cx, cy (image fractions, y down), radius, angle
+            uniform float uAspect; // image width / height
+            varying vec2 vLocal;
             void main() {
-                vec4 c = texture2D(sTex, vTex);
-                gl_FragColor = vec4(clamp(uHue * c.rgb, 0.0, 1.0), c.a);
+                // Image fractions with y pointing down (same as the rest of the app).
+                vec2 img = vec2(vLocal.x, 1.0 - vLocal.y);
+                vec2 d = (img - uSwirl.xy) * vec2(uAspect, 1.0);
+                float r = length(d);
+                if (uSwirl.z > 0.0 && r < uSwirl.z) {
+                    float t = 1.0 - r / uSwirl.z;
+                    float a = -uSwirl.w * t * t; // inverse of the forward twist
+                    float c = cos(a), s = sin(a);
+                    d = vec2(d.x * c - d.y * s, d.x * s + d.y * c);
+                    img = uSwirl.xy + d / vec2(uAspect, 1.0);
+                }
+                if (img.x < 0.0 || img.x > 1.0 || img.y < 0.0 || img.y > 1.0) {
+                    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+                    return;
+                }
+                vec2 tex = (uTex * vec4(img.x, 1.0 - img.y, 0.0, 1.0)).xy;
+                vec4 col = texture2D(sTex, tex);
+                gl_FragColor = vec4(clamp(uHue * col.rgb, 0.0, 1.0), col.a);
             }
         """
         program = GLES20.glCreateProgram()

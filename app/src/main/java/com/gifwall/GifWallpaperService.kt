@@ -38,11 +38,13 @@ class GifWallpaperService : WallpaperService() {
         private var movieScale = 1f
         private var movieLeft = 0f
         private var movieTop = 0f
-        // Breathing: redraw ~30 times a second so the zoom is smooth even for slow GIFs.
+        // Breathing / animated swirl: redraw ~30 times a second so motion is smooth even for slow GIFs.
         private var breath = Breath.config(this@GifWallpaperService)
+        private var swirl = Swirl.config(this@GifWallpaperService)
+        private fun needsTick() = breath.on || swirl.animated
         private val breathTick = object : Runnable {
             override fun run() {
-                if (!visible || !breath.on || isVideo) return
+                if (!visible || !needsTick() || isVideo) return
                 if (movie == null) drawFrame() // the Movie path already redraws on its own timer
                 handler.postDelayed(this, 33)
             }
@@ -50,7 +52,7 @@ class GifWallpaperService : WallpaperService() {
 
         private fun startBreathTick() {
             handler.removeCallbacks(breathTick)
-            if (visible && breath.on && !isVideo) handler.post(breathTick)
+            if (visible && needsTick() && !isVideo) handler.post(breathTick)
         }
 
         private val movieTick = object : Runnable {
@@ -151,6 +153,7 @@ class GifWallpaperService : WallpaperService() {
             if (!file.exists()) return
             speed = Prefs.speed(ctx)
             breath = Breath.config(ctx)
+            swirl = Swirl.config(ctx)
             isVideo = Prefs.isVideo(ctx)
             if (isVideo) {
                 if (hasSurface) startVideo()
@@ -263,7 +266,10 @@ class GifWallpaperService : WallpaperService() {
                     surfaceW / 2f, surfaceH / 2f,
                 )
                 val m = movie
-                if (m != null) drawMovie(canvas, m) else drawable?.draw(canvas)
+                val sw = Swirl.at(swirl, SystemClock.uptimeMillis())
+                if (sw != null) drawSwirled(canvas, sw)
+                else if (m != null) drawMovie(canvas, m)
+                else drawable?.draw(canvas)
                 canvas.restore()
             } finally {
                 try { holder.unlockCanvasAndPost(canvas) } catch (_: Exception) {}
@@ -291,7 +297,9 @@ class GifWallpaperService : WallpaperService() {
         /** Push the current colors and layout to whichever renderer is active. */
         private fun applyLook() {
             breath = Breath.config(ctx)
+            swirl = Swirl.config(ctx)
             video?.setBreath(breath)
+            video?.setSwirl(swirl)
             startBreathTick()
             val f = Prefs.colorFilter(ctx)
             drawable?.colorFilter = f
@@ -303,11 +311,75 @@ class GifWallpaperService : WallpaperService() {
             )
         }
 
-        private fun drawMovie(canvas: Canvas, m: Movie) {
+        private fun advanceMovie(m: Movie) {
             val now = SystemClock.uptimeMillis()
             movieTime = (movieTime + (now - lastTick) * speed) % m.duration()
             lastTick = now
             m.setTime(movieTime.toInt())
+        }
+
+        // ---- Swirl (software path): draw the current frame into a bitmap, then draw that
+        // bitmap through a warped mesh. Canvas.drawBitmapMesh works on the wallpaper's canvas.
+        private var frameBmp: android.graphics.Bitmap? = null
+        private val meshPaint = android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG or android.graphics.Paint.ANTI_ALIAS_FLAG)
+        private val mesh = 48
+        private val verts = FloatArray((mesh + 1) * (mesh + 1) * 2)
+        private val warped = FloatArray(2)
+
+        private fun drawSwirled(canvas: Canvas, sw: Swirl.State) {
+            val m = movie
+            val srcW: Int
+            val srcH: Int
+            val left: Float
+            val top: Float
+            val w: Float
+            val h: Float
+            if (m != null) {
+                srcW = m.width(); srcH = m.height()
+                left = movieLeft; top = movieTop; w = srcW * movieScale; h = srcH * movieScale
+            } else {
+                val d = drawable ?: return
+                val b = d.bounds
+                srcW = d.intrinsicWidth.takeIf { it > 0 } ?: b.width()
+                srcH = d.intrinsicHeight.takeIf { it > 0 } ?: b.height()
+                left = b.left.toFloat(); top = b.top.toFloat(); w = b.width().toFloat(); h = b.height().toFloat()
+            }
+            if (srcW <= 0 || srcH <= 0) return
+            // Keep the work bitmap reasonably small.
+            val k = min(1f, 1080f / max(srcW, srcH))
+            val bw = max(1, (srcW * k).roundToInt())
+            val bh = max(1, (srcH * k).roundToInt())
+            var bmp = frameBmp
+            if (bmp == null || bmp.width != bw || bmp.height != bh) {
+                bmp?.recycle()
+                bmp = android.graphics.Bitmap.createBitmap(bw, bh, android.graphics.Bitmap.Config.ARGB_8888)
+                frameBmp = bmp
+            }
+            bmp!!.eraseColor(Color.TRANSPARENT)
+            val c = Canvas(bmp)
+            if (m != null) {
+                advanceMovie(m)
+                c.scale(bw.toFloat() / srcW, bh.toFloat() / srcH)
+                m.draw(c, 0f, 0f, moviePaint) // moviePaint carries the color filter
+            } else {
+                val d = drawable!!
+                val saved = android.graphics.Rect(d.bounds)
+                d.setBounds(0, 0, bw, bh) // the drawable carries the color filter
+                d.draw(c)
+                d.bounds = saved
+            }
+            val aspect = srcW.toFloat() / srcH
+            var i = 0
+            for (row in 0..mesh) for (col in 0..mesh) {
+                Swirl.warp(sw, aspect, col.toFloat() / mesh, row.toFloat() / mesh, warped)
+                verts[i++] = left + warped[0] * w
+                verts[i++] = top + warped[1] * h
+            }
+            canvas.drawBitmapMesh(bmp, mesh, mesh, verts, 0, null, 0, meshPaint)
+        }
+
+        private fun drawMovie(canvas: Canvas, m: Movie) {
+            advanceMovie(m)
             canvas.save()
             canvas.translate(movieLeft, movieTop)
             canvas.scale(movieScale, movieScale)

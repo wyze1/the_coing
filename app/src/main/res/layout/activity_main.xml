@@ -163,6 +163,54 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal" />
 
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="Swirl"
+        android:textSize="18sp"
+        android:textStyle="bold" />
+
+    <Switch
+        android:id="@+id/swirlSwitch"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Twist the picture into a swirl" />
+
+    <LinearLayout
+        android:id="@+id/swirlSliders"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:text="Swirl center:" />
+
+        <Spinner
+            android:id="@+id/swirlCenter"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/swirlNote"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="12sp"
+        android:alpha="0.7"
+        android:text="Points 1–4 are the same focal points used for breathing." />
+
     <Button
         android:id="@+id/photosButton"
         android:layout_width="match_parent"

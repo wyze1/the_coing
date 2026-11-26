@@ -23,6 +23,31 @@ internal sealed class Settings
     public int BreatheMode { get; set; }               // 0 center, 1-4 that point, 5 cycle
     public double[] Points { get; set; } = { 0.3, 0.3, 0.7, 0.3, 0.3, 0.7, 0.7, 0.7 };
 
+    // Swirl / twirl warp around a center point.
+    public bool Swirl { get; set; }
+    public double SwirlDepth { get; set; } = 1;    // turns at the center; negative = other way
+    public double SwirlSize { get; set; } = 1;     // 1 = half the picture's shorter side
+    public int SwirlCenter { get; set; }           // 0 picture center, 1-4 focal point
+    public double SwirlPeriod { get; set; }        // 0 = still, else seconds per back-and-forth
+
+    public static readonly string[] SwirlCenterNames =
+        { "Center of picture", "Point 1", "Point 2", "Point 3", "Point 4" };
+
+    public string SwirlJson()
+    {
+        var pts = Points.Length == 8 ? Points : new Settings().Points;
+        int c = Math.Clamp(SwirlCenter, 0, 4);
+        return JsonSerializer.Serialize(new
+        {
+            on = Swirl,
+            depth = Math.Clamp(SwirlDepth, -3, 3),
+            size = Math.Clamp(SwirlSize, 0.1, 2),
+            cx = c == 0 ? 0.5 : pts[(c - 1) * 2],
+            cy = c == 0 ? 0.5 : pts[(c - 1) * 2 + 1],
+            period = Math.Clamp(SwirlPeriod, 0, 30),
+        });
+    }
+
     public static readonly string[] BreatheModeNames =
         { "Center", "Point 1", "Point 2", "Point 3", "Point 4", "Cycle through points" };
 
