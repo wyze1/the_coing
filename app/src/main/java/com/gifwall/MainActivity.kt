@@ -339,8 +339,8 @@ class MainActivity : Activity() {
                 android.view.MotionEvent.ACTION_DOWN -> {
                     lastX = e.x; lastY = e.y
                     v.parent.requestDisallowInterceptTouchEvent(true) // don't scroll the page
-                    if (overlay.placingIndex >= 0) {
-                        placePoint(overlay.placingIndex, e.x, e.y)
+                    if (focalOverlay.placingIndex >= 0) {
+                        placePoint(focalOverlay.placingIndex, e.x, e.y)
                         return@setOnTouchListener true
                     }
                 }
@@ -370,18 +370,18 @@ class MainActivity : Activity() {
             v.translationY = Prefs.panY(this) * frame.height
         }
         preview.colorFilter = Prefs.colorFilter(this)
-        if (::overlay.isInitialized) overlay.invalidate()
+        if (::focalOverlay.isInitialized) focalOverlay.invalidate()
     }
 
     // ---------- Breathing ----------
 
-    private lateinit var overlay: FocalOverlay
+    private lateinit var focalOverlay: FocalOverlay
     private val pointButtons = mutableListOf<Button>()
 
     private fun setupBreathing() {
         val frame = findViewById<android.widget.FrameLayout>(R.id.previewFrame)
-        overlay = FocalOverlay(this).apply { positionOf = { i -> imageToFrame(Breath.point(this@MainActivity, i)) } }
-        frame.addView(overlay, android.widget.FrameLayout.LayoutParams(-1, -1))
+        focalOverlay = FocalOverlay(this).apply { positionOf = { i -> imageToFrame(Breath.point(this@MainActivity, i)) } }
+        frame.addView(focalOverlay, android.widget.FrameLayout.LayoutParams(-1, -1))
 
         val sw = findViewById<Switch>(R.id.breatheSwitch)
         sw.isChecked = Prefs.get(this).getBoolean(Prefs.KEY_BREATHE, false)
@@ -417,9 +417,10 @@ class MainActivity : Activity() {
             val b = Button(this, null, android.R.attr.buttonStyleSmall).apply {
                 text = "Set ${i + 1}"
                 setOnClickListener {
-                    overlay.placingIndex = if (overlay.placingIndex == i) -1 else i
+                    val o = focalOverlay
+                    o.placingIndex = if (o.placingIndex == i) -1 else i
                     refreshBreathUi()
-                    if (overlay.placingIndex == i) toast("Now tap the spot for point ${i + 1} on the preview")
+                    if (o.placingIndex == i) toast("Now tap the spot for point ${i + 1} on the preview")
                 }
             }
             row.addView(b, android.widget.LinearLayout.LayoutParams(0, -2, 1f))
@@ -430,12 +431,12 @@ class MainActivity : Activity() {
 
     private fun refreshBreathUi() {
         val mode = Prefs.get(this).getInt(Prefs.KEY_BREATHE_MODE, Breath.MODE_CENTER)
-        overlay.showPoints = true
-        overlay.activeIndex = if (mode in 1..4) mode - 1 else -1
+        focalOverlay.showPoints = true
+        focalOverlay.activeIndex = if (mode in 1..4) mode - 1 else -1
         pointButtons.forEachIndexed { i, b ->
-            b.text = if (overlay.placingIndex == i) "Tap preview…" else "Set ${i + 1}"
+            b.text = if (focalOverlay.placingIndex == i) "Tap preview…" else "Set ${i + 1}"
         }
-        overlay.invalidate()
+        focalOverlay.invalidate()
     }
 
     private fun placePoint(i: Int, x: Float, y: Float) {
@@ -444,7 +445,7 @@ class MainActivity : Activity() {
             .putFloat(Prefs.keyPointX(i), fx.coerceIn(0f, 1f))
             .putFloat(Prefs.keyPointY(i), fy.coerceIn(0f, 1f))
             .apply()
-        overlay.placingIndex = -1
+        focalOverlay.placingIndex = -1
         refreshBreathUi()
     }
 
