@@ -58,8 +58,12 @@ internal sealed class WallpaperForm : Form
                       $"&fit={(fit ? 1 : 0)}&video={(video ? 1 : 0)}&speed={Num(speed)}&zoom={Num(zoom)}" +
                       $"&fh={(flipH ? 1 : 0)}&fv={(flipV ? 1 : 0)}&hue={hue}&bright={Num(brightness)}" +
                       $"&sat={Num(saturation)}&px={Num(panX)}&py={Num(panY)}" +
-                      $"&breath={Uri.EscapeDataString(s.BreathJson())}");
+                      $"&breath={Uri.EscapeDataString(s.BreathJson())}" +
+                      $"&swirl={Uri.EscapeDataString(s.SwirlJson())}");
     }
+
+    public void SetSwirl(Settings s) =>
+        _ = _web.CoreWebView2?.ExecuteScriptAsync($"setSwirl({s.SwirlJson()})");
 
     public void SetBreath(Settings s) =>
         _ = _web.CoreWebView2?.ExecuteScriptAsync($"setBreath({s.BreathJson()})");
@@ -122,8 +126,9 @@ internal sealed class WallpaperForm : Form
 <style>
   html,body{margin:0;height:100%;background:#000;overflow:hidden}
   #w{position:fixed;inset:0;transform-origin:0 0;will-change:transform}
-  #m{width:100vw;height:100vh;display:block;object-fit:cover;transform-origin:center;transform:translate(calc(var(--px,0) * 100vw), calc(var(--py,0) * 100vh)) scale(calc(var(--zoom,1) * var(--fx,1)), calc(var(--zoom,1) * var(--fy,1)));filter:hue-rotate(var(--hue,0deg)) brightness(var(--bright,1)) saturate(var(--sat,1))}
-  body.fit #m{object-fit:contain}
+  #g{position:absolute;left:0;top:0;display:none}
+  #m,#g{width:100vw;height:100vh;display:block;object-fit:cover;transform-origin:center;transform:translate(calc(var(--px,0) * 100vw), calc(var(--py,0) * 100vh)) scale(calc(var(--zoom,1) * var(--fx,1)), calc(var(--zoom,1) * var(--fy,1)));filter:hue-rotate(var(--hue,0deg)) brightness(var(--bright,1)) saturate(var(--sat,1))}
+  body.fit #m,body.fit #g{object-fit:contain}
 </style></head>
 <body>
 <script>
@@ -204,6 +209,81 @@ internal sealed class WallpaperForm : Form
     requestAnimationFrame(breathTick);
   }
   requestAnimationFrame(breathTick);
+
+  // ---- Swirl: a WebGL canvas drawn on top of the picture, twisting it around a point.
+  // It has the same size rules, filters and transforms as the picture, so everything else still applies.
+  let swirl = { on: false, depth: 1, size: 1, cx: 0.5, cy: 0.5, period: 0 };
+  try { const s = p.get('swirl'); if (s) swirl = JSON.parse(s); } catch (e) {}
+  function setSwirl(s) { swirl = s; }
+  let gl = null, glCanvas = null, glLoc = null;
+  function initGL() {
+    glCanvas = document.createElement('canvas');
+    glCanvas.id = 'g';
+    wrap.appendChild(glCanvas);
+    gl = glCanvas.getContext('webgl', { alpha: false, antialias: false });
+    if (!gl) return false;
+    const vs = `attribute vec2 aPos; varying vec2 vImg;
+      void main() { gl_Position = vec4(aPos, 0.0, 1.0); vImg = vec2((aPos.x + 1.0) / 2.0, (1.0 - aPos.y) / 2.0); }`;
+    const fs = `precision highp float;
+      uniform sampler2D t; uniform vec4 sw; uniform float aspect; varying vec2 vImg;
+      void main() {
+        vec2 img = vImg;
+        vec2 d = (img - sw.xy) * vec2(aspect, 1.0);
+        float r = length(d);
+        if (sw.z > 0.0 && r < sw.z) {
+          float k = 1.0 - r / sw.z;
+          float a = -sw.w * k * k;
+          float c = cos(a), s = sin(a);
+          d = vec2(d.x * c - d.y * s, d.x * s + d.y * c);
+          img = sw.xy + d / vec2(aspect, 1.0);
+        }
+        if (img.x < 0.0 || img.x > 1.0 || img.y < 0.0 || img.y > 1.0) { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
+        gl_FragColor = texture2D(t, img);
+      }`;
+    const prog = gl.createProgram();
+    for (const [type, src] of [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]]) {
+      const sh = gl.createShader(type);
+      gl.shaderSource(sh, src);
+      gl.compileShader(sh);
+      gl.attachShader(prog, sh);
+    }
+    gl.linkProgram(prog);
+    gl.useProgram(prog);
+    const buf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+    const aPos = gl.getAttribLocation(prog, 'aPos');
+    gl.enableVertexAttribArray(aPos);
+    gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+    const tex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    glLoc = { sw: gl.getUniformLocation(prog, 'sw'), aspect: gl.getUniformLocation(prog, 'aspect') };
+    return true;
+  }
+  function swirlTick(now) {
+    requestAnimationFrame(swirlTick);
+    const sz = mediaSize();
+    const ready = el && sz && (el.tagName !== 'VIDEO' || el.readyState >= 2) && (el.tagName !== 'IMG' || el.complete);
+    if (!swirl.on || swirl.depth === 0 || !ready) { if (glCanvas) glCanvas.style.display = 'none'; return; }
+    if (paused) return;
+    if (!gl && !initGL()) return;
+    const k = Math.min(1, 2048 / Math.max(sz[0], sz[1]));
+    const w = Math.round(sz[0] * k), h = Math.round(sz[1] * k);
+    if (glCanvas.width !== w || glCanvas.height !== h) { glCanvas.width = w; glCanvas.height = h; }
+    gl.viewport(0, 0, w, h);
+    try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, el); } catch (e) { return; }
+    const aspect = sz[0] / sz[1];
+    const motion = swirl.period > 0 ? Math.sin(2 * Math.PI * now / (swirl.period * 1000)) : 1;
+    gl.uniform4f(glLoc.sw, swirl.cx, swirl.cy, swirl.size * Math.min(aspect, 1) * 0.5, swirl.depth * motion * 2 * Math.PI);
+    gl.uniform1f(glLoc.aspect, aspect);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    glCanvas.style.display = 'block';
+  }
+  requestAnimationFrame(swirlTick);
 
   // Still frame of the raw picture (for placing focal points in Settings).
   function getFrame() {

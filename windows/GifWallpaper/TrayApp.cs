@@ -17,7 +17,7 @@ internal sealed class TrayApp : ApplicationContext
     private static readonly double[] Brights = { 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2 };
     private static readonly double[] Sats = { 0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2 };
     private readonly ToolStripMenuItem _fitItem, _startupItem, _speedItem, _zoomItem, _flipHItem, _flipVItem, _hueItem,
-        _brightItem, _satItem, _panItem, _breathItem;
+        _brightItem, _satItem, _panItem, _breathItem, _swirlItem;
     private readonly List<WallpaperForm> _forms = new();
     private readonly System.Windows.Forms.Timer _coverTimer = new() { Interval = 1500 };
     private readonly ExplorerWatcher _watcher;
@@ -132,6 +132,9 @@ internal sealed class TrayApp : ApplicationContext
         _breathItem = new ToolStripMenuItem("Breathing", null, (_, _) => UpdateBreath(s => s.Breathe = !s.Breathe))
             { Checked = _settings.Breathe };
         menu.Items.Add(_breathItem);
+        _swirlItem = new ToolStripMenuItem("Swirl", null, (_, _) => UpdateSwirl(s => s.Swirl = !s.Swirl))
+            { Checked = _settings.Swirl };
+        menu.Items.Add(_swirlItem);
         menu.Items.Add(_flipHItem);
         menu.Items.Add(_flipVItem);
         menu.Items.Add(_fitItem);
@@ -180,7 +183,20 @@ internal sealed class TrayApp : ApplicationContext
         change(_settings);
         _settings.Save();
         _breathItem.Checked = _settings.Breathe;
-        foreach (var f in _forms) f.SetBreath(_settings);
+        foreach (var f in _forms)
+        {
+            f.SetBreath(_settings);
+            f.SetSwirl(_settings); // the swirl may be centered on a focal point that just moved
+        }
+    }
+
+    /// <summary>Change swirl settings and apply them live.</summary>
+    internal void UpdateSwirl(Action<Settings> change)
+    {
+        change(_settings);
+        _settings.Save();
+        _swirlItem.Checked = _settings.Swirl;
+        foreach (var f in _forms) f.SetSwirl(_settings);
     }
 
     /// <summary>A still frame of the current wallpaper picture, or null.</summary>

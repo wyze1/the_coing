@@ -19,6 +19,8 @@ internal sealed class SettingsForm : Form
     private readonly ComboBox _breathMode = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
     private readonly PointPicker _picker = new();
     private readonly RadioButton[] _placeButtons = new RadioButton[4];
+    private readonly CheckBox _swirl = new() { Text = "Twist the picture into a swirl", AutoSize = true };
+    private readonly ComboBox _swirlCenter = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
     private readonly List<Action> _refreshers = new();
     private bool _loading;
 
@@ -173,6 +175,34 @@ internal sealed class SettingsForm : Form
         };
         AddFullRow(root, _picker);
 
+        // --- Swirl
+        AddFullRow(root, Heading("Swirl"));
+        _swirl.CheckedChanged += (_, _) => { if (!_loading) _app.UpdateSwirl(s => s.Swirl = _swirl.Checked); };
+        AddFullRow(root, _swirl);
+        AddSlider(root, "Depth", -3, 3, 1, log: false, step: 0.01,
+            get: () => _app.Current.SwirlDepth, set: v => _app.UpdateSwirl(s => s.SwirlDepth = v),
+            fmt: v => v == 0 ? "none" : Num(Math.Abs(v)) + (v > 0 ? " turns ⟲" : " turns ⟳"));
+        AddSlider(root, "Size", 0.1, 2, 1, log: false, step: 0.01,
+            get: () => _app.Current.SwirlSize, set: v => _app.UpdateSwirl(s => s.SwirlSize = v),
+            fmt: v => Pct(v));
+        AddSlider(root, "Motion", 0, 30, 0, log: false, step: 0.1,
+            get: () => _app.Current.SwirlPeriod, set: v => _app.UpdateSwirl(s => s.SwirlPeriod = v),
+            fmt: v => v == 0 ? "still" : "every " + Num(v) + " s");
+        var swirlRow = new FlowLayoutPanel { AutoSize = true, Margin = Padding.Empty, WrapContents = false };
+        swirlRow.Controls.Add(new Label { Text = "Swirl center", AutoSize = true, Margin = new Padding(3, 7, 12, 3) });
+        _swirlCenter.Items.AddRange(Settings.SwirlCenterNames);
+        _swirlCenter.SelectedIndexChanged += (_, _) =>
+        {
+            if (!_loading) _app.UpdateSwirl(s => s.SwirlCenter = _swirlCenter.SelectedIndex);
+        };
+        swirlRow.Controls.Add(_swirlCenter);
+        swirlRow.Controls.Add(new Label
+        {
+            Text = "(points are the breathing focal points above)", AutoSize = true,
+            ForeColor = SystemColors.GrayText, Margin = new Padding(8, 7, 3, 3),
+        });
+        AddFullRow(root, swirlRow);
+
         // --- App
         AddFullRow(root, Heading("App"));
         _startup.CheckedChanged += (_, _) => { if (!_loading) _app.SetStartup(_startup.Checked); };
@@ -228,6 +258,8 @@ internal sealed class SettingsForm : Form
             _flipV.Checked = s.FlipV;
             _startup.Checked = TrayApp.IsStartupEnabled();
             _breathe.Checked = s.Breathe;
+            _swirl.Checked = s.Swirl;
+            _swirlCenter.SelectedIndex = Math.Clamp(s.SwirlCenter, 0, 4);
             _breathMode.SelectedIndex = Math.Clamp(s.BreatheMode, 0, 5);
             _picker.ActiveIndex = s.BreatheMode is >= 1 and <= 4 ? s.BreatheMode - 1 : -1;
             _picker.Invalidate();
