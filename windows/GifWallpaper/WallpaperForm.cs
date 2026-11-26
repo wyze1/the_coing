@@ -56,7 +56,7 @@ internal sealed class WallpaperForm : Form
                      && !mediaName.EndsWith(".webp", StringComparison.OrdinalIgnoreCase);
         core.Navigate($"https://{Host}/index.html#src={Uri.EscapeDataString(src)}" +
                       $"&fit={(fit ? 1 : 0)}&video={(video ? 1 : 0)}&speed={Num(speed)}&zoom={Num(zoom)}" +
-                      $"&fh={(flipH ? 1 : 0)}&fv={(flipV ? 1 : 0)}&hue={hue}&bright={Num(brightness)}" +
+                      $"&fh={(flipH ? 1 : 0)}&fv={(flipV ? 1 : 0)}&color={Uri.EscapeDataString(s.ColorJson())}" +
                       $"&sat={Num(saturation)}&px={Num(panX)}&py={Num(panY)}" +
                       $"&breath={Uri.EscapeDataString(s.BreathJson())}" +
                       $"&swirl={Uri.EscapeDataString(s.SwirlJson())}");
@@ -93,17 +93,12 @@ internal sealed class WallpaperForm : Form
     public void SetFlip(bool h, bool v) =>
         _ = _web.CoreWebView2?.ExecuteScriptAsync($"setFlip({(h ? "true" : "false")},{(v ? "true" : "false")})");
 
-    public void SetSaturation(double s) =>
-        _ = _web.CoreWebView2?.ExecuteScriptAsync($"setSaturation({Num(s)})");
+    /// <summary>Hue, brightness, saturation, contrast, tint, invert and color cycling, all at once.</summary>
+    public void SetColor(Settings s) =>
+        _ = _web.CoreWebView2?.ExecuteScriptAsync($"setColor({s.ColorJson()})");
 
     public void SetPan(double x, double y) =>
         _ = _web.CoreWebView2?.ExecuteScriptAsync($"setPan({Num(x)},{Num(y)})");
-
-    public void SetBrightness(double b) =>
-        _ = _web.CoreWebView2?.ExecuteScriptAsync($"setBrightness({Num(b)})");
-
-    public void SetHue(int degrees) =>
-        _ = _web.CoreWebView2?.ExecuteScriptAsync($"setHue({degrees})");
 
     public void SetZoom(double zoom) =>
         _ = _web.CoreWebView2?.ExecuteScriptAsync($"setZoom({Num(zoom)})");
@@ -127,7 +122,8 @@ internal sealed class WallpaperForm : Form
   html,body{margin:0;height:100%;background:#000;overflow:hidden}
   #w{position:fixed;inset:0;transform-origin:0 0;will-change:transform}
   #g{position:absolute;left:0;top:0;display:none}
-  #m,#g{width:100vw;height:100vh;display:block;object-fit:cover;transform-origin:center;transform:translate(calc(var(--px,0) * 100vw), calc(var(--py,0) * 100vh)) scale(calc(var(--zoom,1) * var(--fx,1)), calc(var(--zoom,1) * var(--fy,1)));filter:hue-rotate(var(--hue,0deg)) brightness(var(--bright,1)) saturate(var(--sat,1))}
+  #m,#g{width:100vw;height:100vh;display:block;object-fit:cover;transform-origin:center;transform:translate(calc(var(--px,0) * 100vw), calc(var(--py,0) * 100vh)) scale(calc(var(--zoom,1) * var(--fx,1)), calc(var(--zoom,1) * var(--fy,1)))}
+  body.cm #m,body.cm #g{filter:url(#cm)}
   body.fit #m,body.fit #g{object-fit:contain}
 </style></head>
 <body>
@@ -154,12 +150,72 @@ internal sealed class WallpaperForm : Form
     s.setProperty('--fy', v ? -1 : 1);
   }
   setFlip(p.get('fh') === '1', p.get('fv') === '1');
-  function setHue(deg) { document.documentElement.style.setProperty('--hue', deg + 'deg'); }
-  setHue(parseInt(p.get('hue') || '0') || 0);
-  function setBrightness(b) { document.documentElement.style.setProperty('--bright', b); }
-  setBrightness(parseFloat(p.get('bright') || '1') || 1);
-  function setSaturation(s) { document.documentElement.style.setProperty('--sat', s); }
-  setSaturation(parseFloat(p.get('sat') ?? '1'));
+  // ---- Colors: one SVG color matrix = hue (+cycling) -> saturation -> brightness -> contrast -> tint -> invert.
+  // Same math as the Android app (ColorFx.kt), so both look the same.
+  let color = { hue: 0, bright: 1, sat: 1, contrast: 1, tintHue: 30, tintStrength: 0, invert: false, cycle: 0 };
+  try { const c = p.get('color'); if (c) color = JSON.parse(c); } catch (e) {}
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('width', '0'); svg.setAttribute('height', '0');
+  svg.style.position = 'absolute';
+  svg.innerHTML = '<filter id="cm" color-interpolation-filters="sRGB"><feColorMatrix id="cmm" type="matrix" ' +
+    'values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 1 0"/></filter>';
+  document.body.appendChild(svg);
+  const cmm = svg.querySelector('#cmm');
+  function hueRows(deg) {
+    const a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+    return [0.213 + c * 0.787 - s * 0.213, 0.715 - c * 0.715 - s * 0.715, 0.072 - c * 0.072 + s * 0.928,
+            0.213 - c * 0.213 + s * 0.143, 0.715 + c * 0.285 + s * 0.140, 0.072 - c * 0.072 - s * 0.283,
+            0.213 - c * 0.213 - s * 0.787, 0.715 - c * 0.715 + s * 0.715, 0.072 + c * 0.928 + s * 0.072];
+  }
+  function mul(a, b) {
+    const m = [];
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++)
+      m.push(a[r * 3] * b[c] + a[r * 3 + 1] * b[3 + c] + a[r * 3 + 2] * b[6 + c]);
+    return m;
+  }
+  function hsv(h) { // fully saturated color at hue h, r/g/b 0..1
+    h = ((h % 360) + 360) % 360;
+    const f = n => { const k = (n + h / 60) % 6; return 1 - Math.max(0, Math.min(k, 4 - k, 1)); };
+    return [f(5), f(3), f(1)];
+  }
+  function affine(c, now) {
+    const hue = c.cycle > 0 ? c.hue + 360 * ((now / 1000 / c.cycle) % 1) : c.hue;
+    const s = c.sat;
+    const sat = [0.213 + 0.787 * s, 0.715 - 0.715 * s, 0.072 - 0.072 * s,
+                 0.213 - 0.213 * s, 0.715 + 0.285 * s, 0.072 - 0.072 * s,
+                 0.213 - 0.213 * s, 0.715 - 0.715 * s, 0.072 + 0.928 * s];
+    let m = mul(sat, hueRows(hue)).map(v => v * c.bright);
+    let o = [0, 0, 0];
+    const k = c.contrast;
+    m = m.map(v => v * k); o = o.map(v => v * k + 0.5 * (1 - k));
+    if (c.tintStrength > 0) {
+      const t = hsv(c.tintHue), st = c.tintStrength, lum = [0.2126, 0.7152, 0.0722];
+      const tm = [];
+      for (let r = 0; r < 3; r++) for (let col = 0; col < 3; col++) tm.push((r === col ? 1 - st : 0) + st * t[r] * lum[col]);
+      m = mul(tm, m);
+      o = [0, 1, 2].map(r => tm[r * 3] * o[0] + tm[r * 3 + 1] * o[1] + tm[r * 3 + 2] * o[2]);
+    }
+    if (c.invert) { m = m.map(v => -v); o = o.map(v => 1 - v); }
+    return [m, o];
+  }
+  function isIdentity(c) {
+    return !(c.cycle > 0) && c.hue === 0 && c.bright === 1 && c.sat === 1 && c.contrast === 1 && !(c.tintStrength > 0) && !c.invert;
+  }
+  function applyColor(now) {
+    if (isIdentity(color)) { document.body.classList.remove('cm'); return; }
+    const [m, o] = affine(color, now);
+    cmm.setAttribute('values',
+      `${m[0]} ${m[1]} ${m[2]} 0 ${o[0]} ${m[3]} ${m[4]} ${m[5]} 0 ${o[1]} ${m[6]} ${m[7]} ${m[8]} 0 ${o[2]} 0 0 0 1 0`);
+    document.body.classList.add('cm');
+  }
+  function setColor(c) { color = c; applyColor(performance.now()); }
+  applyColor(performance.now());
+  function colorTick(now) {
+    requestAnimationFrame(colorTick);
+    if (color.cycle > 0 && !paused) applyColor(now);
+  }
+  requestAnimationFrame(colorTick);
   function setPan(x, y) {
     look.px = x; look.py = y;
     const s = document.documentElement.style;

@@ -14,6 +14,7 @@ internal sealed class SettingsForm : Form
     private readonly CheckBox _flipH = new() { Text = "Flip horizontally", AutoSize = true };
     private readonly CheckBox _flipV = new() { Text = "Flip vertically", AutoSize = true };
     private readonly CheckBox _startup = new() { Text = "Start with Windows", AutoSize = true };
+    private readonly CheckBox _invert = new() { Text = "Invert colors (negative)", AutoSize = true };
     private readonly Label _panLabel = new() { AutoSize = true };
     private readonly CheckBox _breathe = new() { Text = "Make the picture breathe (slow zoom in and out)", AutoSize = true };
     private readonly ComboBox _breathMode = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
@@ -94,6 +95,19 @@ internal sealed class SettingsForm : Form
         AddSlider(root, "Saturation", 0, 4, 1, log: false, step: 0.005,
             get: () => _app.Current.Saturation, set: _app.SetSaturation,
             fmt: v => v == 0 ? "0% (B&W)" : Pct(v));
+        AddSlider(root, "Contrast", 0, 3, 1, log: false, step: 0.005,
+            get: () => _app.Current.Contrast, set: v => _app.UpdateColor(s => s.Contrast = v), fmt: v => Pct(v));
+        AddSlider(root, "Tint color", 0, 360, 30, log: false, step: 1,
+            get: () => _app.Current.TintHue, set: v => _app.UpdateColor(s => s.TintHue = v),
+            fmt: v => TintName(v) + " (" + Num(v) + "°)");
+        AddSlider(root, "Tint strength", 0, 1, 0, log: false, step: 0.005,
+            get: () => _app.Current.TintStrength, set: v => _app.UpdateColor(s => s.TintStrength = v),
+            fmt: v => v == 0 ? "off" : Pct(v));
+        AddSlider(root, "Color cycle", 0, 120, 0, log: false, step: 0.5,
+            get: () => _app.Current.ColorCycle, set: v => _app.UpdateColor(s => s.ColorCycle = v),
+            fmt: v => v == 0 ? "off" : "every " + Num(v) + " s");
+        _invert.CheckedChanged += (_, _) => { if (!_loading) _app.UpdateColor(s => s.Invert = _invert.Checked); };
+        AddFullRow(root, _invert);
 
         // --- Pan: arrow buttons (hold to repeat) + center
         var panRow = new FlowLayoutPanel { AutoSize = true, Margin = Padding.Empty, WrapContents = false };
@@ -240,6 +254,7 @@ internal sealed class SettingsForm : Form
         _app.SetHue(0);
         _app.SetBrightness(1);
         _app.SetSaturation(1);
+        _app.UpdateColor(s => { s.Contrast = 1; s.TintStrength = 0; s.Invert = false; s.ColorCycle = 0; });
         _app.MovePan(-_app.Current.PanX, -_app.Current.PanY);
         _app.SetFlip(false, false);
         RefreshAll();
@@ -257,6 +272,7 @@ internal sealed class SettingsForm : Form
             _flipH.Checked = s.FlipH;
             _flipV.Checked = s.FlipV;
             _startup.Checked = TrayApp.IsStartupEnabled();
+            _invert.Checked = s.Invert;
             _breathe.Checked = s.Breathe;
             _swirl.Checked = s.Swirl;
             _swirlCenter.SelectedIndex = Math.Clamp(s.SwirlCenter, 0, 4);
@@ -368,6 +384,13 @@ internal sealed class SettingsForm : Form
         b.MouseLeave += (_, _) => timer.Stop();
         b.KeyDown += (_, e) => { if (e.KeyCode is Keys.Space or Keys.Enter) action(); };
         b.Disposed += (_, _) => timer.Dispose();
+    }
+
+    private static string TintName(double h)
+    {
+        h = ((h % 360) + 360) % 360;
+        return h < 15 ? "red" : h < 45 ? "orange" : h < 70 ? "yellow" : h < 160 ? "green" : h < 200 ? "cyan"
+            : h < 260 ? "blue" : h < 290 ? "purple" : h < 340 ? "pink" : "red";
     }
 
     private static string Num(double v) => v.ToString("0.##", CultureInfo.InvariantCulture);

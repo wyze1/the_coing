@@ -23,6 +23,26 @@ internal sealed class Settings
     public int BreatheMode { get; set; }               // 0 center, 1-4 that point, 5 cycle
     public double[] Points { get; set; } = { 0.3, 0.3, 0.7, 0.3, 0.3, 0.7, 0.7, 0.7 };
 
+    // Extra color effects.
+    public double Contrast { get; set; } = 1.0;
+    public double TintHue { get; set; } = 30;        // degrees on the color wheel
+    public double TintStrength { get; set; }          // 0..1
+    public bool Invert { get; set; }
+    public double ColorCycle { get; set; }            // 0 = off, else seconds per full rainbow
+
+    /// <summary>All color settings as JSON for the wallpaper page.</summary>
+    public string ColorJson() => JsonSerializer.Serialize(new
+    {
+        hue = (double)Hue,
+        bright = Brightness,
+        sat = Saturation,
+        contrast = Math.Clamp(Contrast, 0, 3),
+        tintHue = TintHue,
+        tintStrength = Math.Clamp(TintStrength, 0, 1),
+        invert = Invert,
+        cycle = Math.Clamp(ColorCycle, 0, 120),
+    });
+
     // Swirl / twirl warp around a center point.
     public bool Swirl { get; set; }
     public double SwirlDepth { get; set; } = 1;    // turns at the center; negative = other way

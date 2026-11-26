@@ -41,10 +41,25 @@ class GifWallpaperService : WallpaperService() {
         // Breathing / animated swirl: redraw ~30 times a second so motion is smooth even for slow GIFs.
         private var breath = Breath.config(this@GifWallpaperService)
         private var swirl = Swirl.config(this@GifWallpaperService)
-        private fun needsTick() = breath.on || swirl.animated
+        private var colorCfg = ColorFx.config(this@GifWallpaperService)
+        private fun needsTick() = breath.on || swirl.animated || colorCfg.cycling
+        private var settingFilter = false
+
+        /** Applies the color settings (at this moment, for cycling) to whatever draws the picture. */
+        private fun applyColor() {
+            val f = ColorFx.filter(colorCfg, SystemClock.uptimeMillis())
+            settingFilter = true // setting a filter makes the drawable ask for a redraw; skip that
+            try {
+                drawable?.colorFilter = f
+                moviePaint.colorFilter = f
+            } finally {
+                settingFilter = false
+            }
+        }
         private val breathTick = object : Runnable {
             override fun run() {
                 if (!visible || !needsTick() || isVideo) return
+                if (colorCfg.cycling) applyColor()
                 if (movie == null) drawFrame() // the Movie path already redraws on its own timer
                 handler.postDelayed(this, 33)
             }
@@ -154,6 +169,7 @@ class GifWallpaperService : WallpaperService() {
             speed = Prefs.speed(ctx)
             breath = Breath.config(ctx)
             swirl = Swirl.config(ctx)
+            colorCfg = ColorFx.config(ctx)
             isVideo = Prefs.isVideo(ctx)
             if (isVideo) {
                 if (hasSurface) startVideo()
@@ -161,7 +177,8 @@ class GifWallpaperService : WallpaperService() {
             }
 
             if (speed != 1f) {
-                moviePaint.colorFilter = Prefs.colorFilter(ctx)
+                colorCfg = ColorFx.config(ctx)
+                applyColor()
                 movie = runCatching { Movie.decodeFile(file.path) }.getOrNull()
                     ?.takeIf { it.duration() > 0 && it.width() > 0 }
                 if (movie != null) {
@@ -178,7 +195,7 @@ class GifWallpaperService : WallpaperService() {
                 ImageDecoder.decodeDrawable(ImageDecoder.createSource(file))
             }.getOrNull()?.also { d ->
                 d.callback = this
-                d.colorFilter = Prefs.colorFilter(ctx)
+                d.colorFilter = ColorFx.filter(colorCfg, SystemClock.uptimeMillis())
                 (d as? AnimatedImageDrawable)?.let {
                     it.repeatCount = AnimatedImageDrawable.REPEAT_INFINITE
                     if (visible) it.start()
@@ -301,10 +318,9 @@ class GifWallpaperService : WallpaperService() {
             video?.setBreath(breath)
             video?.setSwirl(swirl)
             startBreathTick()
-            val f = Prefs.colorFilter(ctx)
-            drawable?.colorFilter = f
-            moviePaint.colorFilter = f
-            video?.setColor(Prefs.colorColumns(ctx))
+            colorCfg = ColorFx.config(ctx)
+            applyColor()
+            video?.setColor(colorCfg)
             video?.setLayout(
                 Prefs.scale(ctx) == Prefs.SCALE_FIT, Prefs.zoom(ctx),
                 Prefs.flipH(ctx), Prefs.flipV(ctx), Prefs.panX(ctx), Prefs.panY(ctx),
@@ -389,7 +405,7 @@ class GifWallpaperService : WallpaperService() {
 
         // Drawable.Callback — the animated drawable asks us to redraw on each new frame.
         override fun invalidateDrawable(who: Drawable) {
-            if (who === drawable) drawFrame()
+            if (who === drawable && !settingFilter) drawFrame()
         }
 
         override fun scheduleDrawable(who: Drawable, what: Runnable, `when`: Long) {

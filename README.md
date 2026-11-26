@@ -27,7 +27,7 @@ A tray app that plays a GIF or video (MP4, WebM, MOV) behind your desktop icons,
 
 1. Download `GifWallpaper.exe` from the "latest" release and run it. If SmartScreen warns you, click **More info → Run anyway** (the app isn't code-signed).
 2. Pick a GIF or video. It starts playing behind your icons.
-3. **Double-click the tray icon** (near the clock) to open **Settings**: choose a file, Fill/Fit, sliders for **Zoom** (10%–1000%), **Speed** (0.1×–5×), **Hue**, **Brightness** (0%–300%) and **Saturation** (0%–400%) with − / + / Reset buttons, **Pan** arrows, **Flip**, **Breathing** (depth, length, focus mode, and 4 focal points you place by clicking a still of your wallpaper), **Swirl** (depth, size, motion, center), and **Start with Windows**. Everything applies instantly. The right-click tray menu has the same options for quick access.
+3. **Double-click the tray icon** (near the clock) to open **Settings**: choose a file, Fill/Fit, sliders for **Zoom** (10%–1000%), **Speed** (0.1×–5×), **Hue**, **Brightness** (0%–300%) and **Saturation** (0%–400%), **Contrast**, **Tint color/strength**, **Color cycle** with − / + / Reset buttons, **Invert colors**, **Pan** arrows, **Flip**, **Breathing** (depth, length, focus mode, and 4 focal points you place by clicking a still of your wallpaper), **Swirl** (depth, size, motion, center), and **Start with Windows**. Everything applies instantly. The right-click tray menu has the same options for quick access.
 
 The animation pauses on any monitor where a maximized or full-screen app covers it. Exiting restores your normal wallpaper.
 Source is in `windows/GifWallpaper` (C#/.NET 8 + WebView2).

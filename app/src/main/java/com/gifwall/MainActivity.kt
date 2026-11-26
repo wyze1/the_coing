@@ -213,6 +213,33 @@ class MainActivity : Activity() {
             label = {
                 if (it == 0f) "Saturation: 0% (black & white)" else "Saturation: ${Fmt.num(it * 100, 1)}%"
             })
+        addSlider("Contrast", 0f, 3f, 0.005f, 1f,
+            get = { Prefs.get(this).getFloat(Prefs.KEY_CONTRAST, 1f) },
+            save = { putFloat(Prefs.KEY_CONTRAST, it) },
+            label = { "Contrast: ${Fmt.num(it * 100, 1)}%" })
+        addSlider("Tint color", 0f, 360f, 1f, 30f, resetText = "Reset",
+            get = { Prefs.get(this).getFloat(Prefs.KEY_TINT_HUE, 30f) },
+            save = { putFloat(Prefs.KEY_TINT_HUE, it) },
+            label = { "Tint color: ${ColorFx.tintName(it)} (${Fmt.num(it, 0)}°)" })
+        addSlider("Tint strength", 0f, 1f, 0.005f, 0f,
+            get = { Prefs.get(this).getFloat(Prefs.KEY_TINT_STRENGTH, 0f) },
+            save = { putFloat(Prefs.KEY_TINT_STRENGTH, it) },
+            label = { if (it == 0f) "Tint strength: off" else "Tint strength: ${Fmt.num(it * 100, 1)}%" })
+        addSlider("Color cycle", 0f, 120f, 0.5f, 0f,
+            get = { Prefs.get(this).getFloat(Prefs.KEY_COLOR_CYCLE, 0f) },
+            save = { putFloat(Prefs.KEY_COLOR_CYCLE, it) },
+            label = {
+                if (it == 0f) "Color cycling: off" else "Color cycling: full rainbow every ${Fmt.num(it, 1)} s"
+            })
+        findViewById<android.widget.LinearLayout>(R.id.sliders).addView(Switch(this).apply {
+            text = "Invert colors (negative)"
+            isChecked = Prefs.get(this@MainActivity).getBoolean(Prefs.KEY_INVERT, false)
+            setPadding(0, dp(8), 0, 0)
+            setOnCheckedChangeListener { _, on ->
+                Prefs.get(this@MainActivity).edit().putBoolean(Prefs.KEY_INVERT, on).apply()
+                refreshPreviewLook()
+            }
+        })
         // Speed is saved when you let go (changing it can restart the GIF decoder).
         addSlider("Speed", Prefs.SPEED_MIN, Prefs.SPEED_MAX, 0.01f, 1f, log = true, live = false,
             get = { Prefs.speed(this) },

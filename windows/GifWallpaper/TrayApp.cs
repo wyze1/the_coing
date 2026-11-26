@@ -17,7 +17,7 @@ internal sealed class TrayApp : ApplicationContext
     private static readonly double[] Brights = { 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2 };
     private static readonly double[] Sats = { 0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2 };
     private readonly ToolStripMenuItem _fitItem, _startupItem, _speedItem, _zoomItem, _flipHItem, _flipVItem, _hueItem,
-        _brightItem, _satItem, _panItem, _breathItem, _swirlItem;
+        _brightItem, _satItem, _panItem, _breathItem, _swirlItem, _invertItem;
     private readonly List<WallpaperForm> _forms = new();
     private readonly System.Windows.Forms.Timer _coverTimer = new() { Interval = 1500 };
     private readonly ExplorerWatcher _watcher;
@@ -114,6 +114,9 @@ internal sealed class TrayApp : ApplicationContext
         }
         UpdateSatChecks();
         menu.Items.Add(_satItem);
+        _invertItem = new ToolStripMenuItem("Invert colors", null, (_, _) => UpdateColor(s => s.Invert = !s.Invert))
+            { Checked = _settings.Invert };
+        menu.Items.Add(_invertItem);
 
         _panItem = new ToolStripMenuItem("Pan");
         _panItem.DropDownItems.Add("Move left", null, (_, _) => MovePan(-0.05, 0));
@@ -188,6 +191,15 @@ internal sealed class TrayApp : ApplicationContext
             f.SetBreath(_settings);
             f.SetSwirl(_settings); // the swirl may be centered on a focal point that just moved
         }
+    }
+
+    /// <summary>Change the extra color settings (contrast, tint, invert, cycling) and apply them live.</summary>
+    internal void UpdateColor(Action<Settings> change)
+    {
+        change(_settings);
+        _settings.Save();
+        _invertItem.Checked = _settings.Invert;
+        foreach (var f in _forms) f.SetColor(_settings);
     }
 
     /// <summary>Change swirl settings and apply them live.</summary>
@@ -286,7 +298,7 @@ internal sealed class TrayApp : ApplicationContext
         _settings.Brightness = b;
         _settings.Save();
         UpdateBrightChecks();
-        foreach (var f in _forms) f.SetBrightness(b); // instant
+        foreach (var f in _forms) f.SetColor(_settings); // instant
     }
 
     private void UpdateBrightChecks()
@@ -302,7 +314,7 @@ internal sealed class TrayApp : ApplicationContext
         _settings.Saturation = s;
         _settings.Save();
         UpdateSatChecks();
-        foreach (var f in _forms) f.SetSaturation(s); // instant
+        foreach (var f in _forms) f.SetColor(_settings); // instant
     }
 
     private void UpdateSatChecks()
@@ -335,7 +347,7 @@ internal sealed class TrayApp : ApplicationContext
         _settings.Hue = deg;
         _settings.Save();
         UpdateHueChecks();
-        foreach (var f in _forms) f.SetHue(deg); // instant
+        foreach (var f in _forms) f.SetColor(_settings); // instant
     }
 
     private void UpdateHueChecks()

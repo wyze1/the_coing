@@ -70,7 +70,7 @@ class VideoRenderer(private val output: Surface, private val file: File) {
     }
 
     private var swirl: Swirl.Config? = null
-    private fun needsTick() = breath?.on == true || swirl?.animated == true
+    private fun needsTick() = breath?.on == true || swirl?.animated == true || colorCfg?.cycling == true
 
     fun setSwirl(cfg: Swirl.Config) = h.post {
         swirl = cfg
@@ -105,8 +105,12 @@ class VideoRenderer(private val output: Surface, private val file: File) {
     }
 
     /** Column-major 3x3 color matrix (hue, brightness, saturation). */
-    fun setColor(columns: FloatArray) = h.post {
-        hue = columns
+    private var colorCfg: ColorFx.Config? = null
+
+    /** All color settings; recomputed every frame so color cycling animates. */
+    fun setColor(cfg: ColorFx.Config) = h.post {
+        colorCfg = cfg
+        startBreathTick()
         draw(updateTexture = false)
     }
 
@@ -236,7 +240,14 @@ class VideoRenderer(private val output: Surface, private val file: File) {
             GLES20.glVertexAttribPointer(aTex, 2, GLES20.GL_FLOAT, false, 16, quad)
             GLES20.glEnableVertexAttribArray(aTex)
             GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(program, "uTex"), 1, false, texMatrix, 0)
+            // Colors: 3x3 matrix (column-major for GL) + offset.
+            val aff = colorCfg?.let { ColorFx.affine(it, android.os.SystemClock.uptimeMillis()) }
+            if (aff != null) for (i in 0 until 9) hue[i] = aff[(i % 3) * 3 + i / 3]
             GLES20.glUniformMatrix3fv(GLES20.glGetUniformLocation(program, "uHue"), 1, false, hue, 0)
+            GLES20.glUniform3f(
+                GLES20.glGetUniformLocation(program, "uOff"),
+                aff?.get(9) ?: 0f, aff?.get(10) ?: 0f, aff?.get(11) ?: 0f,
+            )
             // Swirl: center, radius (in aspect-corrected image units) and twist angle.
             val sw = swirl?.let { Swirl.at(it, android.os.SystemClock.uptimeMillis()) }
             val aspect = videoW.toFloat() / videoH
@@ -303,6 +314,7 @@ class VideoRenderer(private val output: Surface, private val file: File) {
             uniform samplerExternalOES sTex;
             uniform mat4 uTex;
             uniform mat3 uHue;
+            uniform vec3 uOff;
             uniform vec4 uSwirl;   // cx, cy (image fractions, y down), radius, angle
             uniform float uAspect; // image width / height
             varying vec2 vLocal;
@@ -324,7 +336,7 @@ class VideoRenderer(private val output: Surface, private val file: File) {
                 }
                 vec2 tex = (uTex * vec4(img.x, 1.0 - img.y, 0.0, 1.0)).xy;
                 vec4 col = texture2D(sTex, tex);
-                gl_FragColor = vec4(clamp(uHue * col.rgb, 0.0, 1.0), col.a);
+                gl_FragColor = vec4(clamp(uHue * col.rgb + uOff, 0.0, 1.0), col.a);
             }
         """
         program = GLES20.glCreateProgram()
