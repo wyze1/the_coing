@@ -11,8 +11,8 @@ android {
         applicationId = "com.gifwall"
         minSdk = 28
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.4"
+        versionCode = 6
+        versionName = "1.5"
     }
 
     // Fixed key so new builds install over old ones without uninstalling.

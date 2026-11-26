@@ -59,7 +59,7 @@ internal sealed class TrayApp : ApplicationContext
 
         _tray = new NotifyIcon
         {
-            Icon = SystemIcons.Application,
+            Icon = LoadTrayIcon(),
             Text = "GIF Wallpaper",
             ContextMenuStrip = menu,
             Visible = true,
@@ -75,6 +75,13 @@ internal sealed class TrayApp : ApplicationContext
             _ = RebuildAsync();
         else
             ChooseFile();
+    }
+
+    /// <summary>The app icon at the size the tray wants (sharp at any display scaling).</summary>
+    private static Icon LoadTrayIcon()
+    {
+        using var stream = typeof(TrayApp).Assembly.GetManifestResourceStream("app.ico");
+        return stream != null ? new Icon(stream, SystemInformation.SmallIconSize) : SystemIcons.Application;
     }
 
     private void ChooseFile()

@@ -1,3 +1,5 @@
+<img src="art/icon.png" width="96" align="right">
+
 # GIF Wallpaper
 
 A tiny Android app that plays any GIF, animated WebP, or MP4 video as a live wallpaper. Built for the Galaxy S25+ (works on Android 9+).
