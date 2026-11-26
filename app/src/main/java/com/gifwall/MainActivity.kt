@@ -209,14 +209,6 @@ class MainActivity : Activity() {
             label = {
                 if (it == 0f) "Saturation: 0% (black & white)" else "Saturation: ${Fmt.num(it * 100, 1)}%"
             })
-        panXBar = addSlider("Pan", -Prefs.PAN_MAX, Prefs.PAN_MAX, PAN_STEP, 0f, resetText = "Center",
-            get = { Prefs.panX(this) },
-            save = { putFloat(Prefs.KEY_PAN_X, it) },
-            label = { panLabel("Pan left/right", it, "left", "right") })
-        panYBar = addSlider("Pan", -Prefs.PAN_MAX, Prefs.PAN_MAX, PAN_STEP, 0f, resetText = "Center",
-            get = { Prefs.panY(this) },
-            save = { putFloat(Prefs.KEY_PAN_Y, it) },
-            label = { panLabel("Pan up/down", it, "up", "down") })
         // Speed is saved when you let go (changing it can restart the GIF decoder).
         addSlider("Speed", Prefs.SPEED_MIN, Prefs.SPEED_MAX, 0.01f, 1f, log = true, live = false,
             get = { Prefs.speed(this) },
@@ -224,9 +216,6 @@ class MainActivity : Activity() {
             label = { "Speed: ${Fmt.num(it)}×" + if (it == 1f) " (normal)" else "" },
             onSaved = { applyPreviewSpeed() })
     }
-
-    private lateinit var panXBar: SeekBar
-    private lateinit var panYBar: SeekBar
 
     /**
      * Adds a row (label, −, +, reset) and a slider for one setting.
@@ -238,7 +227,6 @@ class MainActivity : Activity() {
         min: Float, max: Float, step: Float, default: Float,
         log: Boolean = false,
         live: Boolean = true,
-        resetText: String = "Reset",
         get: () -> Float,
         save: android.content.SharedPreferences.Editor.(Float) -> Unit,
         label: (Float) -> String,
@@ -270,7 +258,7 @@ class MainActivity : Activity() {
         }
         val minus = smallButton("−")
         val plus = smallButton("+")
-        val reset = smallButton(resetText)
+        val reset = smallButton("Reset")
         val bar = SeekBar(this)
         container.addView(row)
         container.addView(bar)
@@ -328,38 +316,39 @@ class MainActivity : Activity() {
 
     private fun dp(v: Int) = Math.round(v * resources.displayMetrics.density)
 
-    private fun panLabel(name: String, v: Float, neg: String, pos: String): String {
-        val pct = Fmt.num(kotlin.math.abs(v) * 100, 2)
-        return when {
-            v == 0f -> "$name: center"
-            v < 0 -> "$name: $pct% $neg"
-            else -> "$name: $pct% $pos"
-        }
-    }
-
-    /** Dragging the preview pans the picture (moves the pan sliders). */
+    /** Dragging the preview pans the picture; double-tap re-centers it. */
     @android.annotation.SuppressLint("ClickableViewAccessibility")
     private fun setupPreviewDrag() {
         val frame = findViewById<View>(R.id.previewFrame)
+        fun savePan(x: Float, y: Float) {
+            Prefs.get(this).edit()
+                .putFloat(Prefs.KEY_PAN_X, x.coerceIn(-Prefs.PAN_MAX, Prefs.PAN_MAX))
+                .putFloat(Prefs.KEY_PAN_Y, y.coerceIn(-Prefs.PAN_MAX, Prefs.PAN_MAX))
+                .apply()
+            refreshPreviewLook()
+        }
+        val doubleTap = android.view.GestureDetector(this,
+            object : android.view.GestureDetector.SimpleOnGestureListener() {
+                override fun onDoubleTap(e: android.view.MotionEvent): Boolean {
+                    savePan(0f, 0f)
+                    return true
+                }
+            })
         var lastX = 0f
         var lastY = 0f
-        var accX = 0f
-        var accY = 0f
         frame.setOnTouchListener { v, e ->
+            doubleTap.onTouchEvent(e)
             when (e.actionMasked) {
                 android.view.MotionEvent.ACTION_DOWN -> {
-                    lastX = e.x; lastY = e.y; accX = 0f; accY = 0f
+                    lastX = e.x; lastY = e.y
                     v.parent.requestDisallowInterceptTouchEvent(true) // don't scroll the page
                 }
                 android.view.MotionEvent.ACTION_MOVE -> {
-                    // Finger movement as a fraction of the preview, converted to slider ticks.
-                    accX += (e.x - lastX) / v.width / PAN_STEP
-                    accY += (e.y - lastY) / v.height / PAN_STEP
+                    // Finger movement as a fraction of the preview.
+                    val dx = (e.x - lastX) / v.width
+                    val dy = (e.y - lastY) / v.height
                     lastX = e.x; lastY = e.y
-                    val tx = accX.toInt()
-                    val ty = accY.toInt()
-                    if (tx != 0) { panXBar.progress += tx; accX -= tx }
-                    if (ty != 0) { panYBar.progress += ty; accY -= ty }
+                    if (dx != 0f || dy != 0f) savePan(Prefs.panX(this) + dx, Prefs.panY(this) + dy)
                 }
             }
             true
@@ -413,7 +402,6 @@ class MainActivity : Activity() {
 
     companion object {
         private const val REQ_PICK = 1
-        private const val PAN_STEP = 0.0025f
         private const val GOOGLE_PHOTOS = "com.google.android.apps.photos"
     }
 }
