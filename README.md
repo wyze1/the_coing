@@ -10,7 +10,7 @@ A tiny Android app that plays any GIF, animated WebP, or MP4 video as a live wal
 
 ## Use
 1. Open **GIF Wallpaper**, tap **Choose from Google Photos** (or **Choose from files**) and pick a GIF or video. Videos play muted and on loop.
-2. Pick **Fill screen (crop)** or **Fit (no crop)**, drag **Zoom** (50% to 300%, with **Reset zoom**), drag **Hue** (shift all colors, −180° to +180°) **Brightness** (20% to 200%) and **Saturation** (0% = black & white, up to 200%), **Pan** (sliders, or drag the preview), use the **Flip ↔ / Flip ↕** switches, and **Speed** (0.25× to 3×).
+2. Pick **Fill screen (crop)** or **Fit (no crop)**, then adjust the sliders: **Zoom** (10%–1000%), **Hue** (−180° to +180°), **Brightness** (0%–300%), **Saturation** (0% = black & white, up to 400%), **Pan** (±100%, or drag the preview) and **Speed** (0.1×–5×), plus the **Flip ↔ / Flip ↕** switches. Each slider has **− / +** buttons for fine steps (hold to repeat) and a reset button.
 3. Tap **Set as wallpaper** → **Set wallpaper** → choose Home screen or Home and lock screens.
 
 To change the GIF later, just open the app and choose a new one; the wallpaper updates right away.
