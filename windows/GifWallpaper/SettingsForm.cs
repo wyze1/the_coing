@@ -15,6 +15,10 @@ internal sealed class SettingsForm : Form
     private readonly CheckBox _flipV = new() { Text = "Flip vertically", AutoSize = true };
     private readonly CheckBox _startup = new() { Text = "Start with Windows", AutoSize = true };
     private readonly Label _panLabel = new() { AutoSize = true };
+    private readonly CheckBox _breathe = new() { Text = "Make the picture breathe (slow zoom in and out)", AutoSize = true };
+    private readonly ComboBox _breathMode = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200 };
+    private readonly PointPicker _picker = new();
+    private readonly RadioButton[] _placeButtons = new RadioButton[4];
     private readonly List<Action> _refreshers = new();
     private bool _loading;
 
@@ -27,9 +31,6 @@ internal sealed class SettingsForm : Form
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleMode = AutoScaleMode.Dpi;
-        AutoSize = true;
-        AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        Padding = new Padding(12);
         Font = new Font("Segoe UI", 9.5f);
 
         var root = new TableLayoutPanel
@@ -37,18 +38,36 @@ internal sealed class SettingsForm : Form
             ColumnCount = 6,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Dock = DockStyle.Fill,
+            Location = new Point(12, 12),
         };
         // name | slider | value | − | + | reset
         root.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 260));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
         for (int i = 0; i < 3; i++) root.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        Controls.Add(root);
+        // Scrolls if the window is taller than the screen.
+        var scroller = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
+        scroller.Controls.Add(root);
+        Controls.Add(scroller);
+        Load += (_, _) =>
+        {
+            var pref = root.GetPreferredSize(Size.Empty);
+            var work = Screen.FromPoint(Cursor.Position).WorkingArea;
+            int w = pref.Width + 24 + SystemInformation.VerticalScrollBarWidth;
+            int h = Math.Min(pref.Height + 24, work.Height - 60);
+            ClientSize = new Size(w, h);
+            CenterToScreen();
+        };
 
         // --- File
         var choose = new Button { Text = "Choose GIF or video…", AutoSize = true };
-        choose.Click += (_, _) => { _app.ChooseFile(); RefreshAll(); };
+        choose.Click += async (_, _) =>
+        {
+            _app.ChooseFile();
+            RefreshAll();
+            await Task.Delay(1500); // give the new wallpaper a moment to load
+            await LoadFrameAsync();
+        };
         AddFullRow(root, Heading("Wallpaper file"));
         AddFullRow(root, _fileLabel);
         AddFullRow(root, choose);
@@ -97,6 +116,63 @@ internal sealed class SettingsForm : Form
         _flipV.CheckedChanged += (_, _) => { if (!_loading) _app.SetFlip(_flipH.Checked, _flipV.Checked); };
         AddFullRow(root, flipRow);
 
+        // --- Breathing
+        AddFullRow(root, Heading("Breathing"));
+        _breathe.CheckedChanged += (_, _) => { if (!_loading) _app.UpdateBreath(s => s.Breathe = _breathe.Checked); };
+        AddFullRow(root, _breathe);
+        AddSlider(root, "Depth", 0.01, 0.5, 0.08, log: false, step: 0.005,
+            get: () => _app.Current.BreatheDepth, set: v => _app.UpdateBreath(s => s.BreatheDepth = v),
+            fmt: v => "+" + Pct(v));
+        AddSlider(root, "Length", 1, 30, 6, log: false, step: 0.1,
+            get: () => _app.Current.BreathePeriod, set: v => _app.UpdateBreath(s => s.BreathePeriod = v),
+            fmt: v => Num(v) + " s");
+
+        var modeRow = new FlowLayoutPanel { AutoSize = true, Margin = Padding.Empty, WrapContents = false };
+        modeRow.Controls.Add(new Label { Text = "Focus on", AutoSize = true, Margin = new Padding(3, 7, 12, 3) });
+        _breathMode.Items.AddRange(Settings.BreatheModeNames);
+        _breathMode.SelectedIndexChanged += (_, _) =>
+        {
+            if (_loading) return;
+            _app.UpdateBreath(s => s.BreatheMode = _breathMode.SelectedIndex);
+            _picker.ActiveIndex = _breathMode.SelectedIndex is >= 1 and <= 4 ? _breathMode.SelectedIndex - 1 : -1;
+            _picker.Invalidate();
+        };
+        modeRow.Controls.Add(_breathMode);
+        AddFullRow(root, modeRow);
+
+        var placeRow = new FlowLayoutPanel { AutoSize = true, Margin = Padding.Empty, WrapContents = false };
+        placeRow.Controls.Add(new Label { Text = "Click the picture to place point", AutoSize = true, Margin = new Padding(3, 7, 6, 3) });
+        for (int i = 0; i < 4; i++)
+        {
+            int idx = i;
+            var rb = new RadioButton
+            {
+                Text = (i + 1).ToString(), AutoSize = true, Appearance = Appearance.Button,
+                MinimumSize = new Size(32, 0), TextAlign = ContentAlignment.MiddleCenter, Checked = i == 0,
+            };
+            rb.CheckedChanged += (_, _) => { if (rb.Checked) { _picker.SelectedIndex = idx; _picker.Invalidate(); } };
+            _placeButtons[i] = rb;
+            placeRow.Controls.Add(rb);
+        }
+        var refreshPic = new Button { Text = "Refresh picture", AutoSize = true, Margin = new Padding(12, 3, 3, 3) };
+        refreshPic.Click += async (_, _) => await LoadFrameAsync();
+        placeRow.Controls.Add(refreshPic);
+        AddFullRow(root, placeRow);
+
+        _picker.GetPoints = () => _app.Current.Points.Length == 8 ? _app.Current.Points : new Settings().Points;
+        _picker.PointPlaced += (i, x, y) =>
+        {
+            _app.UpdateBreath(s =>
+            {
+                if (s.Points.Length != 8) s.Points = new Settings().Points;
+                s.Points[i * 2] = Math.Round(x, 4);
+                s.Points[i * 2 + 1] = Math.Round(y, 4);
+            });
+            // move on to the next point, so placing all four is quick
+            _placeButtons[(i + 1) % 4].Checked = true;
+        };
+        AddFullRow(root, _picker);
+
         // --- App
         AddFullRow(root, Heading("App"));
         _startup.CheckedChanged += (_, _) => { if (!_loading) _app.SetStartup(_startup.Checked); };
@@ -113,8 +189,18 @@ internal sealed class SettingsForm : Form
         CancelButton = close;
 
         RefreshAll();
+        Shown += async (_, _) => await LoadFrameAsync();
         // Pick up changes made from the tray menu while this window was open.
         Activated += (_, _) => RefreshAll();
+    }
+
+    private async Task LoadFrameAsync()
+    {
+        var img = await _app.GetFrameAsync();
+        if (img == null) return;
+        _picker.Frame?.Dispose();
+        _picker.Frame = img;
+        _picker.Invalidate();
     }
 
     private void ResetAll()
@@ -141,6 +227,10 @@ internal sealed class SettingsForm : Form
             _flipH.Checked = s.FlipH;
             _flipV.Checked = s.FlipV;
             _startup.Checked = TrayApp.IsStartupEnabled();
+            _breathe.Checked = s.Breathe;
+            _breathMode.SelectedIndex = Math.Clamp(s.BreatheMode, 0, 5);
+            _picker.ActiveIndex = s.BreatheMode is >= 1 and <= 4 ? s.BreatheMode - 1 : -1;
+            _picker.Invalidate();
             foreach (var r in _refreshers) r();
             RefreshPan();
         }

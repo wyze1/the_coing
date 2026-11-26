@@ -53,6 +53,26 @@ class VideoRenderer(private val output: Surface, private val file: File) {
     private var panX = 0f
     private var panY = 0f
     private var hue = Hue.columns(0f)
+    private var breath: Breath.Config? = null
+
+    // While breathing, redraw ~60 times a second so the zoom stays smooth between video frames.
+    private val breathTick = object : Runnable {
+        override fun run() {
+            if (!visible || breath?.on != true) return
+            draw(updateTexture = false)
+            h.postDelayed(this, 16)
+        }
+    }
+
+    private fun startBreathTick() {
+        h.removeCallbacks(breathTick)
+        if (visible && breath?.on == true) h.post(breathTick)
+    }
+
+    fun setBreath(cfg: Breath.Config) = h.post {
+        breath = cfg
+        startBreathTick()
+    }
     private var speed = 1f
 
     private val texMatrix = FloatArray(16)
@@ -97,6 +117,7 @@ class VideoRenderer(private val output: Surface, private val file: File) {
 
     fun setVisible(v: Boolean) = h.post {
         visible = v
+        startBreathTick()
         val p = player ?: return@post
         if (!ready) return@post
         runCatching {
@@ -174,13 +195,27 @@ class VideoRenderer(private val output: Surface, private val file: File) {
             // Pan: fraction of the screen -> GL units (GL's y axis points up).
             val ox = panX * 2f
             val oy = -panY * 2f
+            // Breathing: scale every corner around the focal point. The image's top edge is at
+            // oy + hh (texture v = 1), so image fraction fy maps to oy + hh - fy * 2hh.
+            var bs = 1f
+            var fx = 0f
+            var fy = 0f
+            breath?.let { cfg ->
+                Breath.at(cfg, android.os.SystemClock.uptimeMillis())?.let { b ->
+                    bs = b.scale
+                    fx = ox - hw + b.fx * 2f * hw
+                    fy = oy + hh - b.fy * 2f * hh
+                }
+            }
+            fun bx(x: Float) = fx + bs * (x - fx)
+            fun by(y: Float) = fy + bs * (y - fy)
             quad.clear()
             // x, y, u, v for a triangle strip
             quad.put(floatArrayOf(
-                ox - hw, oy - hh, 0f, 0f,
-                ox + hw, oy - hh, 1f, 0f,
-                ox - hw, oy + hh, 0f, 1f,
-                ox + hw, oy + hh, 1f, 1f,
+                bx(ox - hw), by(oy - hh), 0f, 0f,
+                bx(ox + hw), by(oy - hh), 1f, 0f,
+                bx(ox - hw), by(oy + hh), 0f, 1f,
+                bx(ox + hw), by(oy + hh), 1f, 1f,
             ))
             GLES20.glUseProgram(program)
             val aPos = GLES20.glGetAttribLocation(program, "aPos")

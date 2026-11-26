@@ -42,6 +42,7 @@ class MainActivity : Activity() {
         }
 
         buildSliders()
+        setupBreathing()
         setupPreviewDrag()
 
         listOf(R.id.flipH to Prefs.KEY_FLIP_H, R.id.flipV to Prefs.KEY_FLIP_V).forEach { (id, key) ->
@@ -168,6 +169,7 @@ class MainActivity : Activity() {
                 mp.setVolume(0f, 0f)
                 previewPlayer = mp
                 videoPreview.start()
+                videoPreview.post { refreshPreviewLook() } // focal dots need the video's size
                 applyPreviewSpeed()
             }
             videoPreview.setOnErrorListener { _, _, _ ->
@@ -187,6 +189,7 @@ class MainActivity : Activity() {
                 status.text = "Current GIF: $sizeText"
             }.onFailure { status.text = "Saved file couldn't be read; choose another." }
         }
+        findViewById<View>(R.id.previewFrame).post { refreshPreviewLook() }
     }
 
 
@@ -232,6 +235,7 @@ class MainActivity : Activity() {
         save: android.content.SharedPreferences.Editor.(Float) -> Unit,
         label: (Float) -> String,
         onSaved: () -> Unit = {},
+        containerId: Int = R.id.sliders,
     ): SeekBar {
         val ticks = if (log) 1000 else Math.round((max - min) / step)
         fun valueAt(p: Int): Float {
@@ -244,7 +248,7 @@ class MainActivity : Activity() {
             if (log) Math.round(ticks * Math.log((v / min).toDouble()) / Math.log((max / min).toDouble())).toInt()
             else Math.round((v - min) / step)
 
-        val container = findViewById<android.widget.LinearLayout>(R.id.sliders)
+        val container = findViewById<android.widget.LinearLayout>(containerId)
         val row = android.widget.LinearLayout(this).apply {
             orientation = android.widget.LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER_VERTICAL
@@ -335,6 +339,10 @@ class MainActivity : Activity() {
                 android.view.MotionEvent.ACTION_DOWN -> {
                     lastX = e.x; lastY = e.y
                     v.parent.requestDisallowInterceptTouchEvent(true) // don't scroll the page
+                    if (overlay.placingIndex >= 0) {
+                        placePoint(overlay.placingIndex, e.x, e.y)
+                        return@setOnTouchListener true
+                    }
                 }
                 android.view.MotionEvent.ACTION_MOVE -> {
                     // Finger movement as a fraction of the preview = pan as a fraction of the screen.
@@ -362,6 +370,117 @@ class MainActivity : Activity() {
             v.translationY = Prefs.panY(this) * frame.height
         }
         preview.colorFilter = Prefs.colorFilter(this)
+        if (::overlay.isInitialized) overlay.invalidate()
+    }
+
+    // ---------- Breathing ----------
+
+    private lateinit var overlay: FocalOverlay
+    private val pointButtons = mutableListOf<Button>()
+
+    private fun setupBreathing() {
+        val frame = findViewById<android.widget.FrameLayout>(R.id.previewFrame)
+        overlay = FocalOverlay(this).apply { positionOf = { i -> imageToFrame(Breath.point(this@MainActivity, i)) } }
+        frame.addView(overlay, android.widget.FrameLayout.LayoutParams(-1, -1))
+
+        val sw = findViewById<Switch>(R.id.breatheSwitch)
+        sw.isChecked = Prefs.get(this).getBoolean(Prefs.KEY_BREATHE, false)
+        sw.setOnCheckedChangeListener { _, on ->
+            Prefs.get(this).edit().putBoolean(Prefs.KEY_BREATHE, on).apply()
+            refreshBreathUi()
+        }
+
+        addSlider("Depth", 0.01f, 0.5f, 0.005f, 0.08f, containerId = R.id.breathSliders,
+            get = { Prefs.get(this).getFloat(Prefs.KEY_BREATHE_DEPTH, 0.08f) },
+            save = { putFloat(Prefs.KEY_BREATHE_DEPTH, it) },
+            label = { "Breath depth: +${Fmt.num(it * 100, 1)}% zoom" })
+        addSlider("Length", 1f, 30f, 0.1f, 6f, containerId = R.id.breathSliders,
+            get = { Prefs.get(this).getFloat(Prefs.KEY_BREATHE_PERIOD, 6f) },
+            save = { putFloat(Prefs.KEY_BREATHE_PERIOD, it) },
+            label = { "Breath length: ${Fmt.num(it, 1)} s per breath" })
+
+        val spinner = findViewById<android.widget.Spinner>(R.id.breatheMode)
+        spinner.adapter = android.widget.ArrayAdapter(
+            this, android.R.layout.simple_spinner_dropdown_item, Breath.MODE_NAMES,
+        )
+        spinner.setSelection(Prefs.get(this).getInt(Prefs.KEY_BREATHE_MODE, Breath.MODE_CENTER))
+        spinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(p: android.widget.AdapterView<*>?, v: View?, pos: Int, id: Long) {
+                Prefs.get(this@MainActivity).edit().putInt(Prefs.KEY_BREATHE_MODE, pos).apply()
+                refreshBreathUi()
+            }
+            override fun onNothingSelected(p: android.widget.AdapterView<*>?) {}
+        }
+
+        val row = findViewById<android.widget.LinearLayout>(R.id.pointButtons)
+        for (i in 0 until 4) {
+            val b = Button(this, null, android.R.attr.buttonStyleSmall).apply {
+                text = "Set ${i + 1}"
+                setOnClickListener {
+                    overlay.placingIndex = if (overlay.placingIndex == i) -1 else i
+                    refreshBreathUi()
+                    if (overlay.placingIndex == i) toast("Now tap the spot for point ${i + 1} on the preview")
+                }
+            }
+            row.addView(b, android.widget.LinearLayout.LayoutParams(0, -2, 1f))
+            pointButtons += b
+        }
+        refreshBreathUi()
+    }
+
+    private fun refreshBreathUi() {
+        val mode = Prefs.get(this).getInt(Prefs.KEY_BREATHE_MODE, Breath.MODE_CENTER)
+        overlay.showPoints = true
+        overlay.activeIndex = if (mode in 1..4) mode - 1 else -1
+        pointButtons.forEachIndexed { i, b ->
+            b.text = if (overlay.placingIndex == i) "Tap preview…" else "Set ${i + 1}"
+        }
+        overlay.invalidate()
+    }
+
+    private fun placePoint(i: Int, x: Float, y: Float) {
+        val (fx, fy) = frameToImage(x, y) ?: return toast("Choose a GIF or video first")
+        Prefs.get(this).edit()
+            .putFloat(Prefs.keyPointX(i), fx.coerceIn(0f, 1f))
+            .putFloat(Prefs.keyPointY(i), fy.coerceIn(0f, 1f))
+            .apply()
+        overlay.placingIndex = -1
+        refreshBreathUi()
+    }
+
+    /** The preview view currently showing the picture, and the size of the picture inside it. */
+    private fun previewTarget(): Triple<View, android.graphics.Matrix, Pair<Float, Float>>? {
+        if (videoPreview.visibility == View.VISIBLE) {
+            if (videoPreview.width == 0) return null
+            return Triple(videoPreview, android.graphics.Matrix(),
+                videoPreview.width.toFloat() to videoPreview.height.toFloat())
+        }
+        val d = preview.drawable ?: return null
+        if (d.intrinsicWidth <= 0) return null
+        return Triple(preview, android.graphics.Matrix(preview.imageMatrix),
+            d.intrinsicWidth.toFloat() to d.intrinsicHeight.toFloat())
+    }
+
+    /** Image fractions (0..1) -> position in the preview frame (includes zoom, pan, flip). */
+    private fun imageToFrame(p: Pair<Float, Float>): Pair<Float, Float>? {
+        val (v, content, size) = previewTarget() ?: return null
+        val pts = floatArrayOf(p.first * size.first, p.second * size.second)
+        content.mapPoints(pts)
+        v.matrix.mapPoints(pts)
+        return pts[0] + v.left to pts[1] + v.top
+    }
+
+    /** Position in the preview frame -> image fractions (0..1). */
+    private fun frameToImage(x: Float, y: Float): Pair<Float, Float>? {
+        val (v, content, size) = previewTarget() ?: return null
+        val pts = floatArrayOf(x - v.left, y - v.top)
+        val inv = android.graphics.Matrix()
+        if (!v.matrix.invert(inv)) return null
+        inv.mapPoints(pts)
+        val invContent = android.graphics.Matrix()
+        if (!content.invert(invContent)) return null
+        invContent.mapPoints(pts)
+        return pts[0] / size.first to pts[1] / size.second
     }
 
     private var previewPlayer: android.media.MediaPlayer? = null

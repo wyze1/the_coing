@@ -17,7 +17,7 @@ internal sealed class TrayApp : ApplicationContext
     private static readonly double[] Brights = { 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2 };
     private static readonly double[] Sats = { 0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2 };
     private readonly ToolStripMenuItem _fitItem, _startupItem, _speedItem, _zoomItem, _flipHItem, _flipVItem, _hueItem,
-        _brightItem, _satItem, _panItem;
+        _brightItem, _satItem, _panItem, _breathItem;
     private readonly List<WallpaperForm> _forms = new();
     private readonly System.Windows.Forms.Timer _coverTimer = new() { Interval = 1500 };
     private readonly ExplorerWatcher _watcher;
@@ -129,6 +129,9 @@ internal sealed class TrayApp : ApplicationContext
         };
         UpdatePanText();
         menu.Items.Add(_panItem);
+        _breathItem = new ToolStripMenuItem("Breathing", null, (_, _) => UpdateBreath(s => s.Breathe = !s.Breathe))
+            { Checked = _settings.Breathe };
+        menu.Items.Add(_breathItem);
         menu.Items.Add(_flipHItem);
         menu.Items.Add(_flipVItem);
         menu.Items.Add(_fitItem);
@@ -170,6 +173,19 @@ internal sealed class TrayApp : ApplicationContext
     }
 
     internal Settings Current => _settings;
+
+    /// <summary>Change breathing settings (from the Settings window) and apply them live.</summary>
+    internal void UpdateBreath(Action<Settings> change)
+    {
+        change(_settings);
+        _settings.Save();
+        _breathItem.Checked = _settings.Breathe;
+        foreach (var f in _forms) f.SetBreath(_settings);
+    }
+
+    /// <summary>A still frame of the current wallpaper picture, or null.</summary>
+    internal Task<Image?> GetFrameAsync() =>
+        _forms.Count > 0 ? _forms[0].GetFrameAsync() : Task.FromResult<Image?>(null);
 
     private SettingsForm? _settingsForm;
 
@@ -410,9 +426,7 @@ internal sealed class TrayApp : ApplicationContext
                 form.Show();
                 Desktop.Place(form.Handle, screen.Bounds);
                 _forms.Add(form);
-                await form.LoadAsync(_env, pageFolder, mediaName, _settings.Fit, _settings.Speed, _settings.Zoom,
-                    _settings.FlipH, _settings.FlipV, _settings.Hue,
-                    _settings.Brightness, _settings.Saturation, _settings.PanX, _settings.PanY);
+                await form.LoadAsync(_env, pageFolder, mediaName, _settings);
             }
         }
         finally

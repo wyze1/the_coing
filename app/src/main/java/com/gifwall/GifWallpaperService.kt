@@ -38,6 +38,21 @@ class GifWallpaperService : WallpaperService() {
         private var movieScale = 1f
         private var movieLeft = 0f
         private var movieTop = 0f
+        // Breathing: redraw ~30 times a second so the zoom is smooth even for slow GIFs.
+        private var breath = Breath.config(this@GifWallpaperService)
+        private val breathTick = object : Runnable {
+            override fun run() {
+                if (!visible || !breath.on || isVideo) return
+                if (movie == null) drawFrame() // the Movie path already redraws on its own timer
+                handler.postDelayed(this, 33)
+            }
+        }
+
+        private fun startBreathTick() {
+            handler.removeCallbacks(breathTick)
+            if (visible && breath.on && !isVideo) handler.post(breathTick)
+        }
+
         private val movieTick = object : Runnable {
             override fun run() {
                 drawFrame()
@@ -102,6 +117,7 @@ class GifWallpaperService : WallpaperService() {
                     handler.removeCallbacks(movieTick)
                     handler.post(movieTick)
                 }
+                startBreathTick()
                 drawFrame()
             } else {
                 // Pause when the screen is off or an app covers the wallpaper.
@@ -134,6 +150,7 @@ class GifWallpaperService : WallpaperService() {
             val file = Prefs.mediaFile(ctx)
             if (!file.exists()) return
             speed = Prefs.speed(ctx)
+            breath = Breath.config(ctx)
             isVideo = Prefs.isVideo(ctx)
             if (isVideo) {
                 if (hasSurface) startVideo()
@@ -165,6 +182,7 @@ class GifWallpaperService : WallpaperService() {
                 }
             }
             updateBounds()
+            startBreathTick()
         }
 
         private fun startVideo() {
@@ -232,8 +250,13 @@ class GifWallpaperService : WallpaperService() {
             val canvas = try { holder.lockCanvas() } catch (e: Exception) { null } ?: return
             try {
                 canvas.drawColor(Color.BLACK)
-                // Pan, then flip around the center of the screen.
                 canvas.save()
+                // Breathing: zoom the whole picture around the focal point (outermost transform).
+                Breath.at(breath, SystemClock.uptimeMillis())?.let { b ->
+                    val (px, py) = imageToScreen(b.fx, b.fy)
+                    canvas.scale(b.scale, b.scale, px, py)
+                }
+                // Pan, then flip around the center of the screen.
                 canvas.translate(Prefs.panX(ctx) * surfaceW, Prefs.panY(ctx) * surfaceH)
                 canvas.scale(
                     if (Prefs.flipH(ctx)) -1f else 1f, if (Prefs.flipV(ctx)) -1f else 1f,
@@ -247,10 +270,29 @@ class GifWallpaperService : WallpaperService() {
             }
         }
 
+        /** Where a spot on the image (fractions 0..1) currently is on screen, before breathing. */
+        private fun imageToScreen(fx: Float, fy: Float): Pair<Float, Float> {
+            val m = movie
+            val (left, top, w, h) = if (m != null) {
+                listOf(movieLeft, movieTop, m.width() * movieScale, m.height() * movieScale)
+            } else {
+                val b = drawable?.bounds ?: return surfaceW / 2f to surfaceH / 2f
+                listOf(b.left.toFloat(), b.top.toFloat(), b.width().toFloat(), b.height().toFloat())
+            }
+            var x = left + fx * w
+            var y = top + fy * h
+            if (Prefs.flipH(ctx)) x = surfaceW - x
+            if (Prefs.flipV(ctx)) y = surfaceH - y
+            return x + Prefs.panX(ctx) * surfaceW to y + Prefs.panY(ctx) * surfaceH
+        }
+
         private val moviePaint = android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG)
 
         /** Push the current colors and layout to whichever renderer is active. */
         private fun applyLook() {
+            breath = Breath.config(ctx)
+            video?.setBreath(breath)
+            startBreathTick()
             val f = Prefs.colorFilter(ctx)
             drawable?.colorFilter = f
             moviePaint.colorFilter = f

@@ -111,6 +111,58 @@
             android:text="Flip ↕" />
     </LinearLayout>
 
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="Breathing"
+        android:textSize="18sp"
+        android:textStyle="bold" />
+
+    <Switch
+        android:id="@+id/breatheSwitch"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Make the picture breathe (slow zoom in and out)" />
+
+    <LinearLayout
+        android:id="@+id/breathSliders"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:text="Focus on:" />
+
+        <Spinner
+            android:id="@+id/breatheMode"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="Set a focal point: tap a number, then tap the spot on the preview." />
+
+    <LinearLayout
+        android:id="@+id/pointButtons"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal" />
+
     <Button
         android:id="@+id/photosButton"
         android:layout_width="match_parent"

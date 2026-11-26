@@ -25,12 +25,19 @@ object Prefs {
     const val KEY_SATURATION = "saturation"
     const val KEY_PAN_X = "pan_x"
     const val KEY_PAN_Y = "pan_y"
+    const val KEY_BREATHE = "breathe"
+    const val KEY_BREATHE_DEPTH = "breathe_depth"
+    const val KEY_BREATHE_PERIOD = "breathe_period"
+    const val KEY_BREATHE_MODE = "breathe_mode"
+    fun keyPointX(i: Int) = "point${i + 1}_x"
+    fun keyPointY(i: Int) = "point${i + 1}_y"
 
     /** Keys that only change how the picture is drawn (applied live, no reload). */
     val LIVE_KEYS = setOf(
         KEY_SCALE, KEY_ZOOM, KEY_FLIP_H, KEY_FLIP_V, KEY_PAN_X, KEY_PAN_Y,
         KEY_HUE, KEY_BRIGHTNESS, KEY_SATURATION,
-    )
+        KEY_BREATHE, KEY_BREATHE_DEPTH, KEY_BREATHE_PERIOD, KEY_BREATHE_MODE,
+    ) + (0 until 4).flatMap { listOf(keyPointX(it), keyPointY(it)) }
     const val ZOOM_MIN = 0.1f
     const val ZOOM_MAX = 10f
     const val SCALE_FILL = "fill"
