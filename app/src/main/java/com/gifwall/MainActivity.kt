@@ -15,6 +15,7 @@ import android.widget.Button
 import android.widget.ImageView
 import android.widget.RadioGroup
 import android.widget.SeekBar
+import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 import android.widget.VideoView
@@ -45,10 +46,24 @@ class MainActivity : Activity() {
         val zoomBar = findViewById<SeekBar>(R.id.zoomBar)
         val minPct = (Prefs.ZOOM_MIN * 100).toInt()
         zoomBar.max = (Prefs.ZOOM_MAX * 100).toInt() - minPct
+        val flipHSwitch = findViewById<Switch>(R.id.flipH)
+        val flipVSwitch = findViewById<Switch>(R.id.flipV)
         fun showZoom(z: Float) {
             zoomLabel.text = "Zoom: ${(z * 100).toInt()}%"
-            preview.scaleX = z; preview.scaleY = z
-            videoPreview.scaleX = z; videoPreview.scaleY = z
+            val sx = z * (if (flipHSwitch.isChecked) -1 else 1)
+            val sy = z * (if (flipVSwitch.isChecked) -1 else 1)
+            preview.scaleX = sx; preview.scaleY = sy
+            videoPreview.scaleX = sx; videoPreview.scaleY = sy
+        }
+        flipHSwitch.isChecked = Prefs.flipH(this)
+        flipVSwitch.isChecked = Prefs.flipV(this)
+        flipHSwitch.setOnCheckedChangeListener { _, on ->
+            Prefs.get(this).edit().putBoolean(Prefs.KEY_FLIP_H, on).apply()
+            showZoom(Prefs.zoom(this))
+        }
+        flipVSwitch.setOnCheckedChangeListener { _, on ->
+            Prefs.get(this).edit().putBoolean(Prefs.KEY_FLIP_V, on).apply()
+            showZoom(Prefs.zoom(this))
         }
         zoomBar.progress = (Prefs.zoom(this) * 100).toInt() - minPct
         showZoom(Prefs.zoom(this))

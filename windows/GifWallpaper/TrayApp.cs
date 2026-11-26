@@ -13,7 +13,7 @@ internal sealed class TrayApp : ApplicationContext
     private readonly NotifyIcon _tray;
     private static readonly double[] Speeds = { 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3 };
     private static readonly double[] Zooms = { 0.5, 0.75, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3 };
-    private readonly ToolStripMenuItem _fitItem, _startupItem, _speedItem, _zoomItem;
+    private readonly ToolStripMenuItem _fitItem, _startupItem, _speedItem, _zoomItem, _flipHItem, _flipVItem;
     private readonly List<WallpaperForm> _forms = new();
     private readonly System.Windows.Forms.Timer _coverTimer = new() { Interval = 1500 };
     private readonly ExplorerWatcher _watcher;
@@ -64,6 +64,12 @@ internal sealed class TrayApp : ApplicationContext
         menu.Items.Add("Choose GIF or video…", null, (_, _) => ChooseFile());
         menu.Items.Add(_speedItem);
         menu.Items.Add(_zoomItem);
+        _flipHItem = new ToolStripMenuItem("Flip horizontally", null, (_, _) => ToggleFlip(h: true))
+            { Checked = _settings.FlipH };
+        _flipVItem = new ToolStripMenuItem("Flip vertically", null, (_, _) => ToggleFlip(h: false))
+            { Checked = _settings.FlipV };
+        menu.Items.Add(_flipHItem);
+        menu.Items.Add(_flipVItem);
         menu.Items.Add(_fitItem);
         menu.Items.Add(_startupItem);
         menu.Items.Add(new ToolStripSeparator());
@@ -154,6 +160,15 @@ internal sealed class TrayApp : ApplicationContext
         _zoomItem.Text = $"Zoom ({ZoomLabel(_settings.Zoom)})";
     }
 
+    private void ToggleFlip(bool h)
+    {
+        if (h) _settings.FlipH = !_settings.FlipH; else _settings.FlipV = !_settings.FlipV;
+        _settings.Save();
+        _flipHItem.Checked = _settings.FlipH;
+        _flipVItem.Checked = _settings.FlipV;
+        foreach (var f in _forms) f.SetFlip(_settings.FlipH, _settings.FlipV); // instant
+    }
+
     private void ToggleFit()
     {
         _settings.Fit = !_settings.Fit;
@@ -234,7 +249,8 @@ internal sealed class TrayApp : ApplicationContext
                 form.Show();
                 Desktop.Place(form.Handle, screen.Bounds);
                 _forms.Add(form);
-                await form.LoadAsync(_env, pageFolder, mediaName, _settings.Fit, _settings.Speed, _settings.Zoom);
+                await form.LoadAsync(_env, pageFolder, mediaName, _settings.Fit, _settings.Speed, _settings.Zoom,
+                    _settings.FlipH, _settings.FlipV);
             }
         }
         finally

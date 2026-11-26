@@ -48,15 +48,20 @@ class VideoRenderer(private val output: Surface, private val file: File) {
     private var visible = false
     private var fit = false
     private var zoom = 1f
+    private var flipH = false
+    private var flipV = false
     private var speed = 1f
 
     private val texMatrix = FloatArray(16)
     private val quad: FloatBuffer = ByteBuffer.allocateDirect(16 * 4)
         .order(ByteOrder.nativeOrder()).asFloatBuffer()
 
-    fun start(width: Int, height: Int, fit: Boolean, zoom: Float, speed: Float) = h.post {
+    fun start(
+        width: Int, height: Int, fit: Boolean, zoom: Float, flipH: Boolean, flipV: Boolean, speed: Float,
+    ) = h.post {
         viewW = max(1, width); viewH = max(1, height)
         this.fit = fit; this.zoom = zoom; this.speed = speed
+        this.flipH = flipH; this.flipV = flipV
         runCatching {
             initEgl()
             initGl()
@@ -69,8 +74,9 @@ class VideoRenderer(private val output: Surface, private val file: File) {
         draw(updateTexture = false)
     }
 
-    fun setLayout(fit: Boolean, zoom: Float) = h.post {
+    fun setLayout(fit: Boolean, zoom: Float, flipH: Boolean, flipV: Boolean) = h.post {
         this.fit = fit; this.zoom = zoom
+        this.flipH = flipH; this.flipV = flipV
         draw(updateTexture = false)
     }
 
@@ -152,8 +158,9 @@ class VideoRenderer(private val output: Surface, private val file: File) {
             val sx = viewW.toFloat() / videoW
             val sy = viewH.toFloat() / videoH
             val s = (if (fit) min(sx, sy) else max(sx, sy)) * zoom
-            val hw = videoW * s / viewW // half-size in GL units (screen = -1..1)
-            val hh = videoH * s / viewH
+            // Half-size in GL units (screen = -1..1); a negative size mirrors the picture.
+            val hw = videoW * s / viewW * (if (flipH) -1f else 1f)
+            val hh = videoH * s / viewH * (if (flipV) -1f else 1f)
             quad.clear()
             // x, y, u, v for a triangle strip
             quad.put(floatArrayOf(

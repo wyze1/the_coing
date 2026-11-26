@@ -74,9 +74,13 @@ class GifWallpaperService : WallpaperService() {
                 video?.setSpeed(speed)
                 return
             }
-            if (key == Prefs.KEY_ZOOM || key == Prefs.KEY_SCALE) {
-                // Zoom / fit change: just re-layout, so dragging the slider is smooth.
-                video?.setLayout(Prefs.scale(ctx) == Prefs.SCALE_FIT, Prefs.zoom(ctx))
+            if (key == Prefs.KEY_ZOOM || key == Prefs.KEY_SCALE ||
+                key == Prefs.KEY_FLIP_H || key == Prefs.KEY_FLIP_V
+            ) {
+                // Zoom / fit / flip change: just re-layout, so dragging the slider is smooth.
+                video?.setLayout(
+                    Prefs.scale(ctx) == Prefs.SCALE_FIT, Prefs.zoom(ctx), Prefs.flipH(ctx), Prefs.flipV(ctx),
+                )
                 updateBounds()
                 drawFrame()
                 return
@@ -172,7 +176,8 @@ class GifWallpaperService : WallpaperService() {
             r.start(
                 if (surfaceW > 0) surfaceW else frame.width(),
                 if (surfaceH > 0) surfaceH else frame.height(),
-                Prefs.scale(ctx) == Prefs.SCALE_FIT, Prefs.zoom(ctx), speed,
+                Prefs.scale(ctx) == Prefs.SCALE_FIT, Prefs.zoom(ctx),
+                Prefs.flipH(ctx), Prefs.flipV(ctx), speed,
             )
             if (visible) r.setVisible(true)
             video = r
@@ -229,8 +234,15 @@ class GifWallpaperService : WallpaperService() {
             val canvas = try { holder.lockCanvas() } catch (e: Exception) { null } ?: return
             try {
                 canvas.drawColor(Color.BLACK)
+                // Flip around the center of the screen.
+                canvas.save()
+                canvas.scale(
+                    if (Prefs.flipH(ctx)) -1f else 1f, if (Prefs.flipV(ctx)) -1f else 1f,
+                    surfaceW / 2f, surfaceH / 2f,
+                )
                 val m = movie
                 if (m != null) drawMovie(canvas, m) else drawable?.draw(canvas)
+                canvas.restore()
             } finally {
                 try { holder.unlockCanvasAndPost(canvas) } catch (_: Exception) {}
             }

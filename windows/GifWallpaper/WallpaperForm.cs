@@ -37,7 +37,7 @@ internal sealed class WallpaperForm : Form
     protected override bool ShowWithoutActivation => true;
 
     /// <param name="mediaName">File name of the media copy inside <paramref name="pageFolder"/>.</param>
-    public async Task LoadAsync(CoreWebView2Environment env, string pageFolder, string mediaName, bool fit, double speed, double zoom)
+    public async Task LoadAsync(CoreWebView2Environment env, string pageFolder, string mediaName, bool fit, double speed, double zoom, bool flipH, bool flipV)
     {
         await _web.EnsureCoreWebView2Async(env);
         var core = _web.CoreWebView2;
@@ -51,8 +51,12 @@ internal sealed class WallpaperForm : Form
         bool video = !mediaName.EndsWith(".gif", StringComparison.OrdinalIgnoreCase)
                      && !mediaName.EndsWith(".webp", StringComparison.OrdinalIgnoreCase);
         core.Navigate($"https://{Host}/index.html#src={Uri.EscapeDataString(src)}" +
-                      $"&fit={(fit ? 1 : 0)}&video={(video ? 1 : 0)}&speed={Num(speed)}&zoom={Num(zoom)}");
+                      $"&fit={(fit ? 1 : 0)}&video={(video ? 1 : 0)}&speed={Num(speed)}&zoom={Num(zoom)}" +
+                      $"&fh={(flipH ? 1 : 0)}&fv={(flipV ? 1 : 0)}");
     }
+
+    public void SetFlip(bool h, bool v) =>
+        _ = _web.CoreWebView2?.ExecuteScriptAsync($"setFlip({(h ? "true" : "false")},{(v ? "true" : "false")})");
 
     public void SetZoom(double zoom) =>
         _ = _web.CoreWebView2?.ExecuteScriptAsync($"setZoom({Num(zoom)})");
@@ -74,7 +78,7 @@ internal sealed class WallpaperForm : Form
 <html><head><meta charset="utf-8">
 <style>
   html,body{margin:0;height:100%;background:#000;overflow:hidden}
-  #m{width:100vw;height:100vh;display:block;object-fit:cover;transform-origin:center;transform:scale(var(--zoom,1))}
+  #m{width:100vw;height:100vh;display:block;object-fit:cover;transform-origin:center;transform:scale(calc(var(--zoom,1) * var(--fx,1)), calc(var(--zoom,1) * var(--fy,1)))}
   body.fit #m{object-fit:contain}
 </style></head>
 <body>
@@ -88,6 +92,12 @@ internal sealed class WallpaperForm : Form
 
   function setZoom(z) { document.documentElement.style.setProperty('--zoom', z); }
   setZoom(parseFloat(p.get('zoom') || '1') || 1);
+  function setFlip(h, v) {
+    const s = document.documentElement.style;
+    s.setProperty('--fx', h ? -1 : 1);
+    s.setProperty('--fy', v ? -1 : 1);
+  }
+  setFlip(p.get('fh') === '1', p.get('fv') === '1');
   function setSpeed(s) { speed = s; if (el && el.tagName === 'VIDEO') el.playbackRate = s; }
   function pauseMedia() { paused = true; if (el && el.tagName === 'VIDEO') el.pause(); }
   function playMedia() {

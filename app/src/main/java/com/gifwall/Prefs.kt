@@ -11,6 +11,8 @@ object Prefs {
     const val KEY_TYPE = "type"
     const val KEY_SPEED = "speed"
     const val KEY_ZOOM = "zoom"
+    const val KEY_FLIP_H = "flip_h"
+    const val KEY_FLIP_V = "flip_v"
     const val ZOOM_MIN = 0.5f
     const val ZOOM_MAX = 3f
 
@@ -34,6 +36,9 @@ object Prefs {
 
     fun scale(context: Context): String =
         get(context).getString(KEY_SCALE, SCALE_FILL) ?: SCALE_FILL
+
+    fun flipH(context: Context) = get(context).getBoolean(KEY_FLIP_H, false)
+    fun flipV(context: Context) = get(context).getBoolean(KEY_FLIP_V, false)
 
     fun zoom(context: Context): Float =
         get(context).getFloat(KEY_ZOOM, 1f).coerceIn(ZOOM_MIN, ZOOM_MAX)
